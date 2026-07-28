@@ -1,0 +1,32 @@
+# This repo publishes KeyGrid only. The wow/ folder on disk also holds unrelated
+# addons and scratch work, so this is a strict allowlist: ignore everything, then
+# re-admit exactly what belongs in the published repo.
+
+/*
+!/.gitignore
+!/.gitattributes
+!/.pkgmeta
+!/.github/
+!/LICENSE
+!/README.md
+!/CHANGELOG.md
+!/KeyGrid/
+!/keygrid-sync/
+
+# ...and inside those, the things that must never be committed.
+
+# Loot tab: SeasonLoot.lua is transformed from KeystoneLoot's bundled data, which
+# is All Rights Reserved. It stays local-only. See README "Private mode".
+KeyGrid/SeasonLoot.lua
+tools/gen_seasonloot.py
+
+# Generated / local. KeyGrid_SyncData is written entirely by keygrid-sync into
+# the game's AddOns folder; nothing about it belongs in the repo.
+.release/
+*.zip
+__pycache__/
+*.py[cod]
+
+# Secrets
+.env
+config.toml

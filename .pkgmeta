@@ -1,0 +1,45 @@
+package-as: KeyGrid
+
+# The addon lives in a subdirectory of the repo, so hoist it to the package root.
+move-folders:
+    KeyGrid/KeyGrid: KeyGrid
+
+enable-nolib-creation: no
+
+# KeyGrid embeds no libraries -- pure Blizzard API -- so there are no externals.
+
+ignore:
+    # --- Loot tab: developer-only -------------------------------------------
+    # SeasonLoot.lua is transformed from another addon's bundled data (All
+    # Rights Reserved) and must never appear in a published artifact. The other
+    # two are ours, but they are useless without it and the .toc drops all three
+    # inside a #@debug@ block, so keep the package consistent.
+    - KeyGrid/SeasonLoot.lua
+    - KeyGrid/LootData.lua
+    - KeyGrid/UI/LootGrid.lua
+
+    # --- Repo files that are not part of the addon ---------------------------
+    - .github
+    - .gitignore
+    - .gitattributes
+    - .pkgmeta
+    - README.md
+    - CHANGELOG.md
+    - LICENSE
+    - keygrid-sync
+
+    # --- Local-only siblings in this working directory ------------------------
+    # A CI checkout never sees these (they are git-ignored), but a local
+    # release.sh run walks the real folder, so name them explicitly.
+    - TheAnnouncer
+    - HeartyHelper
+    - NaigtalFlightNodes
+    - screenshots
+    - docs
+    - _tools
+    - tools
+    - KeyGrid_SyncData
+    - KeyGrid-SPEC.md
+    - claude.txt
+    - wow-addon-guide.html
+    - "*.zip"

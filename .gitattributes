@@ -1,0 +1,5 @@
+# Normalise to LF in the repo. The packager runs on Linux; CRLF in .toc files
+# has bitten WoW addon builds before.
+* text=auto eol=lf
+*.png binary
+*.zip binary

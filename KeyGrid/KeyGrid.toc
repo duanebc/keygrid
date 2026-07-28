@@ -1,0 +1,37 @@
+## Interface: 120007
+## Title: KeyGrid
+## Notes: Account-wide Mythic+ keystone and progress grid
+## Author: Duane
+## Version: @project-version@
+## SavedVariables: KeyGridDB
+## IconTexture: Interface\Icons\INV_Relics_Hourglass
+## X-License: MIT
+## X-Website: https://github.com/duanebc/KeyGrid
+## X-Category: Character Advancement
+
+# Fill these in after creating each project, then tag a release. The packager
+# reads them to know where to upload; a missing one just skips that host.
+# X-Curse-Project-ID: 000000
+# X-Wago-ID: 000000
+# X-WoWI-ID: 00000
+
+Core.lua
+Dungeons.lua
+Currencies.lua
+#@debug@
+# Loot tab — developer-only. SeasonLoot.lua is not distributable (see README);
+# the packager strips this block, so released builds have no Loot tab at all.
+SeasonLoot.lua
+LootData.lua
+#@end-debug@
+Store.lua
+Data.lua
+Config.lua
+UI\Frame.lua
+UI\Tabs.lua
+UI\Grid.lua
+UI\CoresGrid.lua
+#@debug@
+UI\LootGrid.lua
+#@end-debug@
+UI\Tooltip.lua
