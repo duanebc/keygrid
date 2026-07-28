@@ -1,9 +1,10 @@
 -- KeyGrid/Config.lua
 -- Slash commands.
 --
--- Blocks marked --@debug@ / --@end-debug@ are commented out by the packager, so
--- they exist only in a working checkout. That is where the developer-only dump
--- commands and the Loot tab live.
+-- The packager comments out the debug-marked blocks below, so they exist only in
+-- a working checkout. That is where the developer-only dump commands and the
+-- Loot tab live. (Don't write the marker tokens in prose -- the packager
+-- substitutes them wherever they appear, including inside comments.)
 
 local ADDON, NS = ...
 

@@ -6,6 +6,10 @@ move-folders:
 
 enable-nolib-creation: no
 
+# Ship the hand-written changelog as the release notes rather than a dump of
+# commit messages. Keep CHANGELOG.md current before tagging.
+manual-changelog: CHANGELOG.md
+
 # KeyGrid embeds no libraries -- pure Blizzard API -- so there are no externals.
 
 ignore:
@@ -24,7 +28,6 @@ ignore:
     - .gitattributes
     - .pkgmeta
     - README.md
-    - CHANGELOG.md
     - LICENSE
     - keygrid-sync
 
