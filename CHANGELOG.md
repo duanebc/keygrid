@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.1 — 2026-08-19
+
+- Mythic+ rating reads **N/A** for a character with no run this season. Ratings
+  reset at the season roll, but a cached score was never overwritten, so rows
+  kept showing a rating the character no longer had.
+- A character KeyGrid hasn't seen since the roll also reads N/A, since its
+  stored rating can no longer be trusted; logging into it fills the value back
+  in. The score tooltip says which of the two cases applies.
+- Characters with no runs this season stay in the grid rather than being
+  filtered out as zero-score.
+
 ## v1.0.0 — 2026-08-19
 
 First public release.
