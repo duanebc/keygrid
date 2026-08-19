@@ -13,8 +13,7 @@ local UNTIME = { 1.0, 0.45, 0.20 }
 local GREY   = { 0.42, 0.42, 0.42 }
 local WHITE  = { 1.0, 1.0, 1.0 }
 local AMBER  = { 1.0, 0.75, 0.10 }
-local ACCOL  = { 0.86, 0.76, 0.46 }   -- Field Accolades
-local MARL   = { 0.72, 0.58, 0.95 }   -- Voidlight Marl
+-- Gearing-currency tints come from NS.Currencies.COLUMNS.
 
 -- Compact large counts so a five-digit stack can't overflow a ~52px column.
 function UI.ShortNum(n)
@@ -25,6 +24,16 @@ function UI.ShortNum(n)
     return s
   end
   return tostring(n)
+end
+
+-- Season cap of a currency snapshot, and the number the game counts against it:
+-- some currencies cap on total earned rather than on what you're still holding.
+function UI.SeasonCap(rec) return (rec and rec.cap) or 0 end
+
+function UI.CapProgress(rec)
+  if not rec then return 0 end
+  if rec.useEarnedCap then return rec.collected or 0 end
+  return rec.have or 0
 end
 
 local function scoreColor(score)
@@ -103,6 +112,20 @@ local function ensureCell(row, index)
   return cell
 end
 
+-- A value that has to fit an exact column width ("CAVERN+9", "12/24"): smaller
+-- face, pinned to both edges, wrap off — so it truncates instead of spilling
+-- into the neighbouring column.
+local function setFitted(cell, text, color)
+  cell.big:SetFontObject("GameFontNormal")
+  cell.big:ClearAllPoints()
+  cell.big:SetPoint("LEFT", cell, "LEFT", 1, 0)
+  cell.big:SetPoint("RIGHT", cell, "RIGHT", -1, 0)
+  cell.big:SetWordWrap(false)
+  cell.big:SetJustifyH("CENTER")
+  cell.big:SetText(text)
+  if color then cell.big:SetTextColor(color[1], color[2], color[3]) end
+end
+
 local function setBig(cell, text, color, justify)
   cell.big:SetText(text or "")
   if color then cell.big:SetTextColor(color[1], color[2], color[3]) end
@@ -121,6 +144,9 @@ end
 local function renderCell(row, cell, col, c)
   cell.small:SetText("")
   cell:SetScript("OnEnter", nil)
+  -- Cells are pooled by index, so reset anything a branch below may have changed
+  -- for a different column type on the previous pass.
+  cell.big:SetFontObject("GameFontNormalLarge")
 
   if col.id == "name" then
     local r, g, b = classColor(c.class)
@@ -142,29 +168,14 @@ local function renderCell(row, cell, col, c)
       score > 0 and { scoreColor(score) } or GREY)
 
   elseif col.id == "key" then
-    -- Smaller font + full-width box so long keys (e.g. CAVERN+9) fit and never
-    -- overflow into neighbouring columns. WordWrap off truncates rather than spills.
+    -- Long keys (e.g. CAVERN+9) have to fit the column exactly.
     local text, color = UI.KeyCell(c)
-    cell.big:SetFontObject("GameFontNormal")
-    cell.big:ClearAllPoints()
-    cell.big:SetPoint("LEFT", cell, "LEFT", 1, 0)
-    cell.big:SetPoint("RIGHT", cell, "RIGHT", -1, 0)
-    cell.big:SetWordWrap(false)
-    cell.big:SetJustifyH("CENTER")
-    cell.big:SetText(text)
-    cell.big:SetTextColor(color[1], color[2], color[3])
+    setFitted(cell, text, color)
     cell:SetScript("OnEnter", function(self) NS.UI.ShowKeyTooltip(self, c) end)
 
   elseif col.id == "vault" then
     local text, color = UI.VaultCell(c)
-    cell.big:SetFontObject("GameFontNormal")
-    cell.big:ClearAllPoints()
-    cell.big:SetPoint("LEFT", cell, "LEFT", 1, 0)
-    cell.big:SetPoint("RIGHT", cell, "RIGHT", -1, 0)
-    cell.big:SetWordWrap(false)
-    cell.big:SetJustifyH("CENTER")
-    cell.big:SetText(text)
-    cell.big:SetTextColor(color[1], color[2], color[3])
+    setFitted(cell, text, color)
     cell:SetScript("OnEnter", function(self) NS.UI.ShowVaultTooltip(self, c) end)
 
   elseif col.id == "crest" then
@@ -173,30 +184,34 @@ local function renderCell(row, cell, col, c)
       (cr and cr.count) and { 0.95, 0.8, 0.4 } or GREY)
     cell:SetScript("OnEnter", function(self) NS.UI.ShowCrestTooltip(self, c) end)
 
-  elseif col.id == "accol" or col.id == "marl" then
+  elseif col.currency then
     -- Gearing currencies. On-hand count is the headline; a weekly-capped currency
     -- also shows earned/cap underneath (nothing shown when there's no weekly cap).
-    local isAccol = (col.id == "accol")
-    local rec = isAccol and c.accolades or c.marl
+    -- A "capped" column instead reads on-hand / season cap ("3/4"), which is the
+    -- whole point of the currency for the ones that have a small season maximum.
+    local def = col.currency
+    local rec = c[col.id]
     local n = rec and rec.have
     local weeklyCap = (rec and rec.weeklyCap) or 0
-    -- "--" means never captured (unknown). A captured zero shows as a dim "0" so
-    -- "none on this character" is visibly different from "no data".
-    if n == 0 then
+    local cap = UI.SeasonCap(rec)
+    if def.style == "capped" and n and cap > 0 then
+      setFitted(cell, ("%s/%s"):format(UI.ShortNum(UI.CapProgress(rec)), UI.ShortNum(cap)),
+        n > 0 and def.color or GREY)
+    elseif n == 0 then
+      -- "--" means never captured (unknown). A captured zero shows as a dim "0" so
+      -- "none on this character" is visibly different from "no data".
       setBig(cell, "0", GREY)
     else
-      setBig(cell, n and UI.ShortNum(n) or "--", n and (isAccol and ACCOL or MARL) or GREY)
+      setBig(cell, n and UI.ShortNum(n) or "--", n and def.color or GREY)
     end
-    if n and n > 0 and weeklyCap > 0 then
+    if n and n > 0 and weeklyCap > 0 and def.style ~= "capped" then
       cell.big:ClearAllPoints()
       cell.big:SetPoint("TOP", cell, "TOP", 0, -1)   -- make room for the weekly line
       cell.small:SetText(("%d/%d"):format(rec.weekly or 0, weeklyCap))
       cell.small:SetTextColor(0.6, 0.6, 0.68)
     end
     cell:SetScript("OnEnter", function(self)
-      NS.UI.ShowCurrencyTooltip(self, c, isAccol and "accolades" or "marl",
-        NS.Currencies.Label(isAccol and "ACCOLADES" or "MARL"),
-        isAccol and ACCOL or MARL)
+      NS.UI.ShowCurrencyTooltip(self, c, col.id, NS.Currencies.Label(def.key), def.color)
     end)
 
   elseif col.isDungeon then

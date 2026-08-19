@@ -181,11 +181,12 @@ function Data.CaptureVault(c, now)
   end
 end
 
--- Gearing currencies: Void Cores, Field Accolades, Voidlight Marl, Mythic crest.
--- Each is collected/on-hand/spent/season-cap. In-game only, cached per character
--- in the account-wide DB (like keystones), so alts keep showing their last count.
--- A currency that can't be resolved leaves the cached snapshot untouched rather
--- than blanking it — the same early-login race guard the keystone capture uses.
+-- Gearing currencies: one snapshot per NS.Currencies.COLUMNS entry, plus Void
+-- Cores and the season's crest set. Each is collected/on-hand/spent/season-cap.
+-- In-game only, cached per character in the account-wide DB (like keystones), so
+-- alts keep showing their last count. A currency that can't be resolved leaves
+-- the cached snapshot untouched rather than blanking it — the same early-login
+-- race guard the keystone capture uses.
 function Data.CaptureCurrencies(c, now)
   local Cur = NS.Currencies
   if not Cur then return end
@@ -198,25 +199,35 @@ function Data.CaptureCurrencies(c, now)
     refreshUI()
   end)
 
-  c.cores     = Cur.Snapshot(Cur.Resolve("VOIDCORES"), now) or c.cores
-  c.accolades = Cur.Snapshot(Cur.Resolve("ACCOLADES"), now) or c.accolades
+  -- Warband balances are asynchronous: ask here so the answer is already cached
+  -- by the time a currency cell is hovered.
+  Cur.RequestAccountData()
 
-  -- Voidlight Marl: a currency if the game lists it as one, else a bag reagent.
-  -- Once we've seen the item we remember its id, so a later count of 0 reads as 0.
-  local marl = Cur.Snapshot(Cur.Resolve("MARL"), now)
-  if not marl then
-    local knownID = (NS.ITEM and NS.ITEM.MARL) or (c.marl and c.marl.itemID)
-    marl = Cur.ItemSnapshot("MARL", now, knownID)
+  c.cores = Cur.Snapshot(Cur.Resolve("VOIDCORES"), now) or c.cores
+
+  for _, col in ipairs(Cur.COLUMNS) do
+    -- A currency if the game lists it as one, else (where the def names a bag
+    -- item) a reagent. Once we've seen the item we remember its id, so a later
+    -- count of 0 reads as 0 rather than reverting to unknown.
+    local snap = Cur.Snapshot(Cur.Resolve(col.key), now)
+    if not snap then
+      local cached = c[col.id]
+      local knownID = (NS.ITEM and NS.ITEM[col.key]) or (cached and cached.itemID)
+      snap = Cur.ItemSnapshot(col.key, now, knownID)
+    end
+    c[col.id] = snap or c[col.id]
   end
-  c.marl = marl or c.marl
 
-  -- Mythic crest count (for the M+ Grid Crest column). Kept in its own shape for
-  -- back-compat with the existing crest cell/tooltip.
-  local crest = Cur.Snapshot(Cur.ResolveMythicCrest and Cur.ResolveMythicCrest(), now)
-  if crest then
+  -- Every crest tier this season, for the Crest column's tooltip. c.crest keeps
+  -- the headline tier in its own shape, which is what the cell renders.
+  local crests = Cur.CrestSnapshots(now)
+  if #crests > 0 then
+    c.crests = crests
+    local head = Cur.HeadlineCrest(crests)
     c.crest = {
-      id = crest.id, name = crest.name, count = crest.have,
-      weekly = crest.weekly, weeklyCap = crest.weeklyCap,
+      id = head.id, name = head.name, count = head.have,
+      collected = head.collected, cap = head.cap, useEarnedCap = head.useEarnedCap,
+      weekly = head.weekly, weeklyCap = head.weeklyCap,
       capturedAt = now,
     }
   end
@@ -281,6 +292,14 @@ function Data.CaptureVoidcaches(c)
   end
 end
 
+-- The season id drives the window title. Cached in the DB so the title still
+-- reads correctly on a character where the API hasn't answered yet.
+function Data.CaptureSeason()
+  if C_MythicPlus and C_MythicPlus.GetCurrentSeason then
+    NS.Store.SetSeasonID(C_MythicPlus.GetCurrentSeason())
+  end
+end
+
 function Data.CaptureAffixes()
   if not (C_MythicPlus and C_MythicPlus.GetCurrentAffixes) then return end
   local affixes = C_MythicPlus.GetCurrentAffixes()
@@ -313,6 +332,7 @@ function Data.CaptureAll(reason)
     Data.CaptureCurrencies(c, now)
     Data.CaptureObtained(c)
     Data.CaptureVoidcaches(c)
+    Data.CaptureSeason()
     Data.CaptureAffixes()
   end)
   c.updatedAt = now
@@ -394,6 +414,10 @@ NS.On("CURRENCY_DISPLAY_UPDATE", function()
   pcall(Data.CaptureCurrencies, c, GetServerTime())
   refreshUI()
 end)
+
+-- Warband currency data landing. The event name is client-dependent, and NS.On
+-- quietly swallows one this client doesn't know.
+NS.On("ACCOUNT_CHARACTER_CURRENCY_DATA_RECEIVED", refreshUI)
 
 -- Grow the obtained set as loot is received (boss loot + bonus rolls fire
 -- ENCOUNTER_LOOT_RECEIVED; personal pickups fire CHAT_MSG_LOOT).

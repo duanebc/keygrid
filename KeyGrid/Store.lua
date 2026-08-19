@@ -39,6 +39,13 @@ function Store.Init()
   if (KeyGridDB.version or 0) < SCHEMA_VERSION then
     KeyGridDB.version = SCHEMA_VERSION
   end
+  -- Forget cached ids for currencies KeyGrid no longer tracks, so a retired key
+  -- (last season's) can't sit in SavedVariables forever.
+  if NS.Currencies then
+    for key in pairs(KeyGridDB.currencyIDs) do
+      if not NS.Currencies.DEFS[key] then KeyGridDB.currencyIDs[key] = nil end
+    end
+  end
   Store.db = KeyGridDB
 end
 
@@ -78,6 +85,13 @@ function Store.SetSeasonMapsFromGame()
 end
 
 function Store.SeasonMaps() return KeyGridDB.season.mapIDs or {} end
+
+function Store.SetSeasonID(id)
+  id = tonumber(id)
+  if id and id > 0 then KeyGridDB.season.id = id end
+end
+
+function Store.SeasonID() return KeyGridDB.season.id or 0 end
 
 function Store.SetAffixes(ids) KeyGridDB.affixes = ids or {} end
 function Store.Affixes() return KeyGridDB.affixes or {} end
@@ -207,10 +221,10 @@ function Store.SortList(list)
       av, bv = a.ilvl or 0, b.ilvl or 0
     elseif key == "crest" then
       av, bv = (a.crest and a.crest.count) or 0, (b.crest and b.crest.count) or 0
-    elseif key == "accol" then
-      av, bv = (a.accolades and a.accolades.have) or 0, (b.accolades and b.accolades.have) or 0
-    elseif key == "marl" then
-      av, bv = (a.marl and a.marl.have) or 0, (b.marl and b.marl.have) or 0
+    elseif NS.Currencies and NS.Currencies.ColumnByID(key) then
+      -- Every gearing-currency column sorts on its on-hand count; the record
+      -- lives on the character under the column's own id.
+      av, bv = (a[key] and a[key].have) or 0, (b[key] and b[key].have) or 0
     elseif type(key) == "number" then
       local al, as = levelScore(a, key)
       local bl, bs = levelScore(b, key)

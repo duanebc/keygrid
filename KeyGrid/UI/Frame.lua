@@ -15,8 +15,8 @@ local M = {
   COL_KEY   = 92,
   COL_VAULT = 68,
   COL_CREST = 50,
-  COL_ACCOL = 56,   -- Field Accolades
-  COL_MARL  = 52,   -- Voidlight Marl
+  -- Gearing-currency column widths live on NS.Currencies.COLUMNS, next to the
+  -- currency they belong to.
   COL_DUN   = 46,
   PAD       = 12,
   TITLE_H   = 30,
@@ -66,8 +66,10 @@ function UI.BuildColumns()
   add({ id = "key",   label = "Key",       w = M.COL_KEY,   align = "CENTER", sortable = false })
   add({ id = "vault", label = "Vault",     w = M.COL_VAULT, align = "CENTER", sortable = false })
   add({ id = "crest", label = "Crest",     w = M.COL_CREST, align = "CENTER", sortable = true })
-  add({ id = "accol", label = "Accol",     w = M.COL_ACCOL, align = "CENTER", sortable = true })
-  add({ id = "marl",  label = "Marl",      w = M.COL_MARL,  align = "CENTER", sortable = true })
+  for _, cc in ipairs(NS.Currencies.COLUMNS) do
+    add({ id = cc.id, label = cc.label, w = cc.w, align = "CENTER",
+          sortable = true, currency = cc })
+  end
   for _, dc in ipairs(NS.Dungeons.Columns()) do
     add({ id = dc.mapID, label = dc.abbr, w = M.COL_DUN, align = "CENTER",
           sortable = true, isDungeon = true, mapID = dc.mapID })
@@ -121,13 +123,21 @@ local function footerText()
     for i = 1, total do glyph = glyph .. (i <= filled and "|cff40ff40[x]|r" or "|cff555555[ ]|r") end
     parts[#parts + 1] = "Vault: " .. glyph .. (" %d/%d"):format(filled, total)
   end
+  -- Only mention the sync once it has actually run. keygrid-sync is a Python
+  -- script and a Blizzard API client — a fine ask for whoever wants it, and far
+  -- too much to imply is a missing step for everyone else. Someone with an empty
+  -- grid is pointed at it by f.empty; the rest just see a working addon.
   if db.lastSyncAt then
     parts[#parts + 1] = "Last sync: " .. NS.UI.Ago(db.lastSyncAt) ..
       " (" .. (db.lastSyncRegion and db.lastSyncRegion:upper() or "API") .. ")"
-  else
-    parts[#parts + 1] = "No API sync yet — run keygrid-sync"
   end
   return table.concat(parts, "   |   ")
+end
+
+-- Title bar: the season is looked up, never hardcoded (see Dungeons.SeasonTitle).
+local function titleText()
+  local season = NS.Dungeons.SeasonTitle()
+  return season and ("KeyGrid — " .. season) or "KeyGrid"
 end
 
 -- "2h ago" style relative time
@@ -181,7 +191,7 @@ function UI.BuildGridPanel(f, panel)
 
   f.empty = content:CreateFontString(nil, "OVERLAY", "GameFontDisable")
   f.empty:SetPoint("TOP", content, "TOP", 0, -20)
-  f.empty:SetText("No characters with a rating yet.\nLog in on a rated character, or run keygrid-sync.\n/kg all shows everyone.")
+  f.empty:SetText("No characters with a rating yet.\nCharacters appear once you log into them — /kg all shows everyone.\nTo import alts you haven't logged into: /kg sync (optional).")
   f.empty:Hide()
 end
 
@@ -220,7 +230,7 @@ function UI.EnsureFrame()
 
   f.titleText = title:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   f.titleText:SetPoint("LEFT", title, "LEFT", M.PAD, 0)
-  f.titleText:SetText("KeyGrid — Midnight Season 1")
+  f.titleText:SetText(titleText())
 
   f.subText = title:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   f.subText:SetPoint("RIGHT", title, "RIGHT", -30, 0)
@@ -239,7 +249,14 @@ function UI.EnsureFrame()
   f.coresPanel = CreateFrame("Frame", nil, f.body)
   f.coresPanel:SetAllPoints(f.body)
   f.panels = { f.gridPanel, f.coresPanel }
-  local tabNames = { "M+ Grid", "Void Cores" }
+  -- Void Cores is greyed out until Blizzard settles how cores actually work this
+  -- season; the tab stays visible so it's clear the tracking is coming, and the
+  -- capture keeps running so the numbers are already there when it's enabled.
+  local tabs = {
+    { name = "M+ Grid" },
+    { name = "Void Cores", disabled = true,
+      reason = "Void Core tracking is on hold until this season's cores are pinned down." },
+  }
 
   UI.BuildGridPanel(f, f.gridPanel)
   if UI.BuildCoresPanel then UI.BuildCoresPanel(f, f.coresPanel) end
@@ -252,11 +269,11 @@ function UI.EnsureFrame()
     f.lootPanel = CreateFrame("Frame", nil, f.body)
     f.lootPanel:SetAllPoints(f.body)
     f.panels[3] = f.lootPanel
-    tabNames[3] = "Loot"
+    tabs[3] = { name = "Loot" }
     UI.BuildLootPanel(f, f.lootPanel)
   end
 
-  UI.CreateTabs(f, tabNames)
+  UI.CreateTabs(f, tabs)
 
   -- Resize grip: the user can grow the window; the size is remembered.
   f:SetResizable(true)
@@ -345,6 +362,8 @@ end
 --------------------------------------------------------------------------------
 function UI.Refresh()
   if not UI.frame or not UI.frame:IsShown() then return end
+  -- Re-read the season each refresh: the API answers a beat after login.
+  UI.frame.titleText:SetText(titleText())
   local tab = NS.Store.DB().ui.tab or 1
   if tab == 2 and UI.RefreshCores then
     UI.RefreshCores()

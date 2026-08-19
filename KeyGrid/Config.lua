@@ -22,11 +22,32 @@ if not SlashCmdList["KGRELOAD"] then
 end
 --@end-debug@
 
+-- Optional, and deliberately not advertised in the footer: it needs Python and a
+-- Blizzard API client, which is a lot to put in front of someone who just wants
+-- the grid. Whoever does type this has only ever seen the addon, not the repo, so
+-- it has to be the whole recipe.
+local function syncHelp()
+  NS.Print("keygrid-sync fills in best runs + score for alts you haven't logged into.")
+  -- .pkgmeta excludes keygrid-sync from the package, so an addon-manager install
+  -- does NOT have it locally. GitHub is the only place to get it.
+  print("  It is |cffff9999not part of the addon download|r — get the |cffffd100keygrid-sync|r folder from GitHub.")
+  print("  1. Make a free API client at |cff88ccffhttps://develop.battle.net/access/clients|r")
+  print("     and add the redirect URI |cffffd100https://localhost:8080/callback|r")
+  print("  2. Set BNET_CLIENT_ID and BNET_CLIENT_SECRET (or fill ~/.keygrid/config.toml)")
+  print("  3. Run it with Python 3.11+ from that folder:")
+  print("     |cffffd100python keygrid_sync.py --verbose|r")
+  print("     ...or without the browser step: |cffffd100python keygrid_sync.py --char "
+    .. (NS.PlayerKey() or "Name-Realm") .. "|r")
+  print("  4. First run creates the KeyGrid_SyncData addon: log out to character select")
+  print("     once so the game sees it, then |cffffd100/reload|r. Later syncs need only /reload.")
+  print("  Full setup: |cff88ccffhttps://github.com/duanebc/KeyGrid/tree/main/keygrid-sync|r")
+end
+
 local function usage()
   NS.Print("Commands:")
   NS.Print("  /kg                  toggle the window")
   NS.Print("  /kg grid             open the M+ grid tab")
-  NS.Print("  /kg cores            open the Void Cores tab")
+  NS.Print("  /kg sync             how to run keygrid-sync (fills in alts)")
   NS.Print("  /kg all              toggle showing zero-score characters")
   NS.Print("  /kg hide Name-Realm  hide a row")
   NS.Print("  /kg show Name-Realm  unhide a row")
@@ -55,8 +76,13 @@ SlashCmdList["KEYGRID"] = function(msg)
     NS.UI.Toggle()
   elseif cmd == "grid" then
     NS.UI.Show(); NS.UI.ShowTab(1)
+  elseif cmd == "sync" then
+    syncHelp()
   elseif cmd == "cores" then
-    NS.UI.Show(); NS.UI.ShowTab(2)
+    -- Tab 2 is greyed out this season (see UI/Frame.lua); ShowTab would silently
+    -- bounce back to the grid, so say why instead.
+    NS.Print("The Void Cores tab is disabled — how cores work this season isn't pinned down yet.")
+    NS.UI.Show(); NS.UI.ShowTab(1)
   --@debug@
   elseif cmd == "private" then
     if not NS.LootAvailable() then

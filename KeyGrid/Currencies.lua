@@ -1,6 +1,6 @@
 -- KeyGrid/Currencies.lua
--- Resolve, snapshot + dump the gearing currencies (Void Cores, Field Accolades,
--- Voidlight Marl, Mythic crest).
+-- Resolve, snapshot + dump the gearing currencies (Corrosive Coins, Voidlight
+-- Marl, Venomblight Manaflux, Tidal Spark Dust, Void Cores, and the crest set).
 --
 -- Resolution is the hard part. The in-game currency list (GetCurrencyListInfo)
 -- only contains currencies THIS character has earned, and the Currency tab's
@@ -20,50 +20,71 @@ local C = {}
 NS.Currencies = C
 
 -- Fill from /kg curdump to pin an id permanently. Left nil = resolve at runtime.
-NS.CURRENCY = { VOIDCORES = nil, MYTHICCREST = nil, ACCOLADES = nil, MARL = nil }
+NS.CURRENCY = {
+  VOIDCORES = nil, COINS = nil, MARL = nil, MANAFLUX = nil, SPARKDUST = nil,
+}
 
--- Fill if Voidlight Marl turns out to be a bag item rather than a currency
+-- Fill if one of these turns out to be a bag item rather than a currency
 -- (see C.ItemSnapshot). Left nil = discover it by name from bags.
-NS.ITEM = { MARL = nil }
+NS.ITEM = { MARL = nil, MANAFLUX = nil, SPARKDUST = nil }
 
 -- Name matchers, deliberately loose so a rename/plural/spacing change still hits.
 -- key -> {
 --   label     display name
 --   match     (lowercased currency name) -> truthy
---   tiebreak  "last" keeps the last match instead of the first (crest tiers)
 --   scan      false = never id-probe this key (too many historical matches)
 --   item      bag-item name fragment, if it might not be a currency at all
 -- }
+-- Crests are the one thing that can't be matched this way -- see C.CrestIDs.
 local DEFS = {
   VOIDCORES = {
     label = "Void Cores",
     match = function(n) return n:find("void", 1, true) and n:find("core", 1, true) end,
   },
-  ACCOLADES = {
-    label = "Field Accolades",
-    match = function(n) return n:find("accolade", 1, true) end,
+  COINS = {
+    label = "Corrosive Coin",   -- singular in-game (id 3448)
+    match = function(n) return n:find("corrosive", 1, true) end,
   },
   MARL = {
     label = "Voidlight Marl",
     match = function(n) return n:find("marl", 1, true) end,
     item  = "marl",
   },
-  MYTHICCREST = {
-    label = "Mythic crest",
-    -- Crests are listed in tier order; the Mythic one is usually "Gilded".
-    match = function(n) return n:find("crest", 1, true) end,
-    prefer = function(n) return n:find("gilded", 1, true) or n:find("mythic", 1, true) end,
-    tiebreak = "last",
-    -- Every expansion ships four crests, so probing ids by name would pick a
-    -- random historical one. The character's own list is the only sane source.
-    scan = false,
-    -- ...and for the same reason it must NOT be cached account-wide: one alt
-    -- matching a leftover last-expansion crest would then poison every row.
-    -- Each character resolves the crest from its own list, every session.
-    noCache = true,
+  MANAFLUX = {
+    label = "Venomblight Manaflux",
+    match = function(n) return n:find("manaflux", 1, true) or n:find("venomblight", 1, true) end,
+    item  = "manaflux",
+  },
+  SPARKDUST = {
+    label = "Tidal Spark Dust",
+    match = function(n) return n:find("spark", 1, true) and n:find("dust", 1, true) end,
+    item  = "spark dust",
   },
 }
 C.DEFS = DEFS
+
+-- Grid columns for the per-character currencies, in display order. `id` is both
+-- the column id and the field name on the character record; `key` indexes DEFS.
+-- style = "capped" shows on-hand / season cap ("3/4") instead of a bare count.
+-- Every warband-transferable currency lists all characters' balances and the
+-- total on hover; that's driven by the game's own isAccountTransferable flag, so
+-- roster = true is only needed to force the block on before a character has been
+-- captured (or if the client stops setting the flag).
+C.COLUMNS = {
+  { key = "COINS",     id = "coins",     label = "Coins", w = 56, color = { 0.86, 0.76, 0.46 },
+    roster = true },
+  { key = "MARL",      id = "marl",      label = "Marl",  w = 52, color = { 0.72, 0.58, 0.95 },
+    roster = true },
+  { key = "MANAFLUX",  id = "manaflux",  label = "Flux",  w = 52, color = { 0.45, 0.95, 0.65 } },
+  { key = "SPARKDUST", id = "sparkdust", label = "Dust",  w = 56, color = { 0.45, 0.85, 1.00 },
+    style = "capped" },
+}
+
+function C.ColumnByID(id)
+  for _, col in ipairs(C.COLUMNS) do
+    if col.id == id then return col end
+  end
+end
 
 function C.Label(key) return (DEFS[key] and DEFS[key].label) or key end
 
@@ -95,7 +116,6 @@ end
 
 function C.CachedID(key)
   if NS.CURRENCY[key] then return NS.CURRENCY[key] end
-  if DEFS[key] and DEFS[key].noCache then return nil end
   local ids = dbIDs()
   local id = ids and ids[key]
   if not id then return nil end
@@ -106,7 +126,7 @@ function C.CachedID(key)
 end
 
 local function remember(key, id)
-  local ids = (not (DEFS[key] and DEFS[key].noCache)) and dbIDs() or nil
+  local ids = dbIDs()
   if ids then ids[key] = id end
   NS.Debug("resolved %s currencyID = %s", C.Label(key), tostring(id))
 end
@@ -150,22 +170,16 @@ C.ForEach = forEachCurrency
 local function scanList(key)
   local def = DEFS[key]
   if not def then return end
-  local preferred, fallback
+  local found
   forEachCurrency(function(info, _, cid)
     if not cid then return end
     local name = info.name and info.name:lower() or ""
-    if not def.match(name) then return end
-    if not def.prefer then
-      fallback = cid
-      return def.tiebreak ~= "last"       -- first match wins unless told otherwise
+    if def.match(name) then
+      found = cid
+      return true                          -- first match wins
     end
-    if def.prefer(name) then
-      preferred = cid
-      return true
-    end
-    fallback = cid                        -- keep the last non-preferred match
   end)
-  return preferred or fallback
+  return found
 end
 
 -- Resolve one registry key to a currencyID. Cheap and safe to call every capture.
@@ -178,10 +192,7 @@ function C.Resolve(key)
   return id
 end
 
-function C.ResolveVoidCores()   return C.Resolve("VOIDCORES") end
-function C.ResolveAccolades()   return C.Resolve("ACCOLADES") end
-function C.ResolveMarl()        return C.Resolve("MARL") end
-function C.ResolveMythicCrest() return C.Resolve("MYTHICCREST") end
+function C.ResolveVoidCores() return C.Resolve("VOIDCORES") end
 
 --------------------------------------------------------------------------------
 -- Layer 3b: direct id probe
@@ -336,9 +347,198 @@ function C.ItemSnapshot(key, now, knownID)
 end
 
 --------------------------------------------------------------------------------
+-- Warband balances: what OTHER characters hold
+--
+-- Blizzard's REST API has no currency endpoint, so keygrid-sync can't fill this
+-- in — the only source for a character KeyGrid has never seen is the data behind
+-- the currency-transfer UI, which knows every account character's balance for a
+-- transferable currency. Those functions are new enough (and were named more
+-- than once) that they're probed rather than called outright: a client without
+-- them simply falls back to KeyGrid's own per-character captures.
+--------------------------------------------------------------------------------
+local ACCOUNT_FETCH = {
+  "FetchCurrencyDataFromAccountCharacters",
+  "GetCurrencyDataFromAccountCharacters",
+  "GetCurrencyDataForAccountCharacters",
+}
+local ACCOUNT_REQUEST = {
+  "RequestCurrencyDataForAccountCharacters",
+  "RequestCurrencyDataFromAccountCharacters",
+}
+
+local function accountFn(names)
+  if not C_CurrencyInfo then return nil end
+  for _, n in ipairs(names) do
+    if type(C_CurrencyInfo[n]) == "function" then return C_CurrencyInfo[n], n end
+  end
+end
+
+-- Name of the API this client actually has, for /kg curdump.
+function C.AccountAPIName()
+  local _, name = accountFn(ACCOUNT_FETCH)
+  return name
+end
+
+-- The data arrives asynchronously, so ask early (capture time) and the answer is
+-- already cached by the time anyone hovers a cell.
+local lastAccountRequest = 0
+function C.RequestAccountData()
+  local fn = accountFn(ACCOUNT_REQUEST)
+  if not fn then return end
+  local now = (GetTime and GetTime()) or 0
+  if now > 0 and now - lastAccountRequest < 10 then return end
+  lastAccountRequest = now
+  pcall(fn)
+end
+
+-- -> array of { name, quantity }, richest first. nil when the client has no such
+-- API, or hasn't answered yet. Field names are read loosely for the same reason
+-- the functions are probed.
+function C.AccountBalances(id)
+  local fn = accountFn(ACCOUNT_FETCH)
+  if not (id and fn) then return nil end
+  local ok, data = pcall(fn, id)
+  if not ok or type(data) ~= "table" then return nil end
+  local out = {}
+  local me = UnitName and UnitName("player")
+  local haveMe = false
+  for _, e in pairs(data) do
+    if type(e) == "table" then
+      local name = e.characterName or e.name or e.character
+      local qty = tonumber(e.quantity or e.amount or e.currencyQuantity)
+      if name and qty then
+        if name == me then haveMe = true end
+        out[#out + 1] = { name = name, quantity = qty }
+      end
+    end
+  end
+  -- Empty means the answer hasn't arrived yet (the fetch is asynchronous), which
+  -- is not the same as "nobody has any" — say nothing rather than report a total
+  -- that is missing every alt.
+  if #out == 0 then return nil end
+  -- The list is the OTHER characters on the account: this one is read straight
+  -- from the currency, or the total is short by everything you're carrying.
+  if me and not haveMe then
+    local info = currencyInfo(id)
+    if info then
+      out[#out + 1] = { name = me, quantity = info.quantity or 0, isPlayer = true }
+    end
+  end
+  table.sort(out, function(a, b)
+    if a.quantity ~= b.quantity then return a.quantity > b.quantity end
+    return a.name < b.name
+  end)
+  return out
+end
+
+--------------------------------------------------------------------------------
+-- Crests
+--
+-- Every expansion ships a full set of crests (one per tier) and old ones stay in
+-- the currency list forever, so no name match can pick out "this season's". What
+-- is reliable: one expansion's crests occupy adjacent currency ids, in ascending
+-- tier order. So take every crest in THIS character's list, and keep the newest
+-- contiguous run of ids — that's the current set, lowest tier first.
+--
+-- Deliberately never cached account-wide: a character who has earned none this
+-- season would resolve to a leftover cluster and poison every row.
+--------------------------------------------------------------------------------
+local CREST_CLUSTER_GAP = 8
+local CREST_PROBE_STEPS = 4
+
+local function isCrestID(id)
+  local info = currencyInfo(id)
+  local name = info and info.name
+  return name and name ~= "" and name:lower():find("crest", 1, true) and true or false
+end
+
+function C.CrestIDs()
+  local ids = {}
+  forEachCurrency(function(info, _, cid)
+    local name = info.name and info.name:lower()
+    if cid and name and name:find("crest", 1, true) then ids[#ids + 1] = cid end
+  end)
+  table.sort(ids)
+  local cluster = {}
+  for i = #ids, 1, -1 do
+    if #cluster == 0 or (cluster[1] - ids[i]) <= CREST_CLUSTER_GAP then
+      table.insert(cluster, 1, ids[i])       -- keep ascending = tier order
+    else
+      break
+    end
+  end
+  if #cluster == 0 then return cluster end
+
+  -- The list holds only the tiers this character has earned, so fill in the
+  -- rest: every id across the cluster's span (a tier you've never earned leaves
+  -- a hole in the middle just as easily as at either end), then a bounded walk
+  -- outward. GetCurrencyInfo names a currency you have none of, and a tier
+  -- reading "0" beats a tier missing from the tooltip. Bounded because far
+  -- enough out is another expansion's crest block.
+  local out = {}
+  for id = cluster[1], cluster[#cluster] do
+    if isCrestID(id) then out[#out + 1] = id end
+  end
+  local id, steps = cluster[1] - 1, 0
+  while steps < CREST_PROBE_STEPS and isCrestID(id) do
+    table.insert(out, 1, id)
+    id, steps = id - 1, steps + 1
+  end
+  id, steps = cluster[#cluster] + 1, 0
+  while steps < CREST_PROBE_STEPS and isCrestID(id) do
+    out[#out + 1] = id
+    id, steps = id + 1, steps + 1
+  end
+  return out
+end
+
+-- The id block also holds crests nobody can earn: Midnight S2 ships four extra
+-- "Mistcrest" entries that duplicate real tier names with no season cap and no
+-- way to gain them. Drop anything with no cap that has never been earned — but
+-- only when a genuinely capped tier exists, so a season that simply doesn't cap
+-- its crests still lists every tier.
+local function dropUnearnableTiers(list)
+  local anyCapped = false
+  for _, s in ipairs(list) do
+    if (s.cap or 0) > 0 then anyCapped = true end
+  end
+  if not anyCapped then return list end
+  local out = {}
+  for _, s in ipairs(list) do
+    if (s.cap or 0) > 0 or (s.have or 0) > 0 or (s.collected or 0) > 0 then
+      out[#out + 1] = s
+    end
+  end
+  return out
+end
+
+-- Full snapshot per crest tier, each carrying its own season cap.
+function C.CrestSnapshots(now)
+  local all = {}
+  for _, id in ipairs(C.CrestIDs()) do
+    local snap = C.Snapshot(id, now)
+    if snap then all[#all + 1] = snap end
+  end
+  local out = dropUnearnableTiers(all)
+  for tier, snap in ipairs(out) do snap.tier = tier end
+  return out
+end
+
+-- Headline for the Crest column: the highest tier this character has actually
+-- seen, else the top tier (so a fresh character reads "0", not "unknown").
+function C.HeadlineCrest(list)
+  if not list or #list == 0 then return nil end
+  for i = #list, 1, -1 do
+    local s = list[i]
+    if (s.have or 0) > 0 or (s.collected or 0) > 0 then return s end
+  end
+  return list[#list]
+end
+
+--------------------------------------------------------------------------------
 -- Diagnostics
 --------------------------------------------------------------------------------
-local DUMP_ORDER = { "VOIDCORES", "ACCOLADES", "MARL", "MYTHICCREST" }
+local DUMP_ORDER = { "VOIDCORES", "COINS", "MARL", "MANAFLUX", "SPARKDUST" }
 
 local function printResolved()
   NS.Print("Resolved (account-wide cache):")
@@ -365,8 +565,36 @@ local function printResolved()
       end
     end
   end
+
+  local crests = C.CrestSnapshots(GetServerTime())
+  if #crests == 0 then
+    print("  |cffff5555Crests = NOT FOUND|r (none in this character's currency list)")
+  else
+    local head = C.HeadlineCrest(crests)
+    print(("  Crests (%d, newest id cluster — headline is %s):"):format(#crests, head and head.name or "?"))
+    for _, s in ipairs(crests) do
+      print(("    [%d] %s  have=%d earned=%d cap=%s wk=%d/%d"):format(
+        s.id, s.name or "?", s.have or 0, s.collected or 0, tostring(s.cap or 0),
+        s.weekly or 0, s.weeklyCap or 0))
+    end
+  end
+
+  -- Whether this client can tell us what other characters hold.
+  local api = C.AccountAPIName()
+  if api then
+    local coins = C.AccountBalances(C.Resolve("COINS"))
+    print(("  Warband API: |cff40ff40C_CurrencyInfo.%s|r — %s for %s"):format(
+      api, coins and ((#coins) .. " characters") or "no data yet", C.Label("COINS")))
+    for _, e in ipairs(coins or {}) do
+      print(("    %s  %d"):format(e.name, e.quantity))
+    end
+  else
+    print("  Warband API: |cffff5555none on this client|r — roster falls back to KeyGrid's captures")
+  end
+
   NS.Print("Missing? /kg curfind <text> to search every currency by name, then set")
-  print("  NS.CURRENCY.<KEY> = <id> in Currencies.lua (KEY = VOIDCORES/ACCOLADES/MARL/MYTHICCREST)")
+  print("  NS.CURRENCY.<KEY> = <id> in Currencies.lua (KEY = "
+    .. table.concat(DUMP_ORDER, "/") .. ")")
 end
 
 function C.Dump()

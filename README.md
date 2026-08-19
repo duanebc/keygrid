@@ -17,13 +17,17 @@ and shows all of them together, account-wide.
 | iLvl | equipped item level |
 | Vault | Great Vault progress (runs toward each slot) |
 | Best runs | per-dungeon best level, colour-coded |
-| Currencies | crest, Field Accolades, Voidlight Marl — with weekly earned/cap |
+| Crest | the highest crest tier earned; hover for every tier's count and season cap |
+| Coins | Corrosive Coins; every transferable currency shows each character's balance and the account total on hover |
+| Currencies | Corrosive Coins, Voidlight Marl, Venomblight Manaflux, Tidal Spark Dust — with weekly earned/cap, or on-hand/season-cap where the season caps it |
 
 Sortable by any column. Characters with no score are hidden by default (`/kg all`
-shows them).
+shows them). The season shown in the title bar is read from the game.
 
 **Void Cores tab** — collected / on-hand / spent / remaining / earned-this-week per
-character, so you can see who still has upgrades banked.
+character. **Currently disabled**: how Void Cores work this season isn't settled
+yet, so the tab is greyed out. KeyGrid still captures the numbers, so switching it
+back on shows history rather than starting from empty.
 
 ## Install
 
@@ -36,7 +40,7 @@ CurseForge, Wago, or WoWInterface via your addon manager, or grab the zip from
 ```
 /kg              toggle the window          (/keys and /keygrid also work)
 /kg grid         open the M+ Grid tab
-/kg cores        open the Void Cores tab
+/kg sync         print how to set up and run keygrid-sync
 /kg all          show/hide zero-score characters
 /kg hide Name-Realm    hide a row
 /kg show Name-Realm    unhide a row
@@ -58,7 +62,10 @@ logged into it at least once** with KeyGrid installed. Its keystone and vault ar
 as of that moment, not live.
 
 Best runs and score can also come from Blizzard's REST API — see `keygrid-sync/`
-below, which fills those in for alts you have not logged into.
+below, which fills those in for alts you have not logged into. Currencies are not
+in that API at all: the Coins tooltip lists other characters from the game's own
+warband currency data where the client provides it, and from KeyGrid's snapshots
+otherwise.
 
 ## keygrid-sync (optional)
 
