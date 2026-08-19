@@ -163,9 +163,12 @@ local function renderCell(row, cell, col, c)
       il > 0 and { 0.82, 0.82, 0.9 } or GREY)
 
   elseif col.id == "score" then
-    local score = c.score or 0
-    setBig(cell, score > 0 and tostring(score) or "--",
+    -- Ratings reset with the season, so anything not stamped with the current
+    -- one is gone. "N/A" rather than a number the character no longer has.
+    local score = NS.Store.SeasonScore(c)
+    setBig(cell, score > 0 and tostring(score) or "N/A",
       score > 0 and { scoreColor(score) } or GREY)
+    cell:SetScript("OnEnter", function(self) NS.UI.ShowScoreTooltip(self, c) end)
 
   elseif col.id == "key" then
     -- Long keys (e.g. CAVERN+9) have to fit the column exactly.

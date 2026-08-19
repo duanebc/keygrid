@@ -39,6 +39,14 @@ function Store.Init()
   if (KeyGridDB.version or 0) < SCHEMA_VERSION then
     KeyGridDB.version = SCHEMA_VERSION
   end
+  -- Records written before scores were season-stamped have no high-water mark;
+  -- seed it from the cached score so the roster filter behaves unchanged. The
+  -- score itself stays unstamped, so it reads as "not this season" until the
+  -- character is captured again -- which is the honest answer, since nothing
+  -- here can tell whether that number survived the season roll.
+  for _, c in pairs(KeyGridDB.chars) do
+    if not c.peakScore and (c.score or 0) > 0 then c.peakScore = c.score end
+  end
   -- Forget cached ids for currencies KeyGrid no longer tracks, so a retired key
   -- (last season's) can't sit in SavedVariables forever.
   if NS.Currencies then
@@ -120,7 +128,7 @@ end
 --------------------------------------------------------------------------------
 -- Deterministic field-level merge (see spec 3.6). Newer wins; ties prefer api.
 --------------------------------------------------------------------------------
-function Store.MergeScore(c, score, at, source)
+function Store.MergeScore(c, score, at, source, season)
   if score == nil then return end
   at = at or 0
   local better = (not c.scoreAt)
@@ -130,7 +138,27 @@ function Store.MergeScore(c, score, at, source)
     c.score = score
     c.scoreAt = at
     c.scoreSource = source
+    -- Which season the number belongs to. Without this a rating captured last
+    -- season is indistinguishable from a real one, and the game has since
+    -- zeroed it.
+    if season then c.scoreSeason = season end
+    -- Sticky high-water mark. c.score legitimately drops to 0 at a season roll,
+    -- and the roster filter needs to keep telling an M+ character apart from a
+    -- bank alt that has never run one.
+    if score > (c.peakScore or 0) then c.peakScore = score end
   end
+end
+
+-- The rating a character actually holds *this* season, which is what the grid
+-- shows. 0 means either no runs this season or no capture since the season
+-- rolled -- both cases where last season's number would be a lie.
+function Store.SeasonScore(c)
+  if not c then return 0 end
+  local season = NS.Dungeons and NS.Dungeons.SeasonID and NS.Dungeons.SeasonID()
+  -- Season unknown (API not ready, nothing cached): don't blank real data.
+  if not season then return c.score or 0 end
+  if c.scoreSeason ~= season then return 0 end
+  return c.score or 0
 end
 
 function Store.MergeBest(c, mapID, run, source)
@@ -176,7 +204,7 @@ function Store.MergeSyncData()
     if sc.name then c.name = sc.name end
     if sc.realm then c.realm = sc.realm end
     if sc.class and not c.class then c.class = sc.class end
-    Store.MergeScore(c, sc.score, sync.generatedAt, "api")
+    Store.MergeScore(c, sc.score, sync.generatedAt, "api", sync.seasonId)
     if type(sc.best) == "table" then
       for mapID, run in pairs(sc.best) do
         Store.MergeBest(c, mapID, run, "api")
@@ -231,7 +259,8 @@ function Store.SortList(list)
       av, bv = al, bl
       tieA, tieB = as, bs
     else -- "score"
-      av, bv = a.score or 0, b.score or 0
+      -- Sort on what the column shows, so the N/A rows collect at one end.
+      av, bv = Store.SeasonScore(a), Store.SeasonScore(b)
     end
 
     if av ~= bv then
@@ -252,7 +281,9 @@ function Store.CharList()
   local out = {}
   for key, c in pairs(KeyGridDB.chars) do
     c._key = key
-    local score = c.score or 0
+    -- Filter on the high-water mark, not this season's score: a character who
+    -- has simply not run a key yet this season still belongs in the grid.
+    local score = c.peakScore or c.score or 0
     if not ui.hidden[key] and (ui.showAll or score > 0) then
       out[#out + 1] = c
     end

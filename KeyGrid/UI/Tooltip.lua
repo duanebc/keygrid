@@ -81,6 +81,39 @@ function UI.ShowKeyTooltip(anchor, c)
 end
 
 --------------------------------------------------------------------------------
+-- Score column tooltip. "N/A" has two distinct causes and the difference is the
+-- whole point: one needs a run, the other needs a login.
+--------------------------------------------------------------------------------
+function UI.ShowScoreTooltip(anchor, c)
+  GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
+  GameTooltip:AddLine("Mythic+ rating", 1, 1, 1)
+  GameTooltip:AddLine(c.name or c._key or "", 0.7, 0.7, 0.7)
+  GameTooltip:AddLine(" ")
+
+  local score = NS.Store.SeasonScore(c)
+  if score > 0 then
+    GameTooltip:AddDoubleLine("This season", tostring(score), 0.7, 0.7, 0.7, UI.ScoreColor(score))
+    if c.scoreAt then
+      GameTooltip:AddLine(("%s, %s"):format(sourceLabel(c.scoreSource), UI.Ago(c.scoreAt)), 0.5, 0.5, 0.5)
+    end
+  elseif c.scoreSeason then
+    GameTooltip:AddLine("No Mythic+ run this season.", 0.7, 0.7, 0.7)
+    if (c.peakScore or 0) > 0 then
+      GameTooltip:AddDoubleLine("Best ever", tostring(c.peakScore), 0.5, 0.5, 0.5, 0.6, 0.6, 0.6)
+    end
+  else
+    GameTooltip:AddLine("Not seen since the season rolled.", 1, 0.75, 0.1)
+    GameTooltip:AddLine("Ratings reset each season, so the last number KeyGrid", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("captured is no longer this character's.", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Log in on it to fill this in.", 0.6, 0.6, 0.6)
+    if (c.peakScore or 0) > 0 then
+      GameTooltip:AddDoubleLine("Last known", tostring(c.peakScore), 0.5, 0.5, 0.5, 0.6, 0.6, 0.6)
+    end
+  end
+  GameTooltip:Show()
+end
+
+--------------------------------------------------------------------------------
 -- Vault column tooltip
 --------------------------------------------------------------------------------
 function UI.ShowVaultTooltip(anchor, c)
@@ -327,7 +360,12 @@ function UI.ShowRowTooltip(anchor, c)
   if c.ilvl and c.ilvl > 0 then
     GameTooltip:AddDoubleLine("Item level", ("%.1f"):format(c.ilvl), 0.7, 0.7, 0.7, 1, 1, 1)
   end
-  GameTooltip:AddDoubleLine("Rating", tostring(c.score or 0), 0.7, 0.7, 0.7, UI.ScoreColor(c.score))
+  local seasonScore = NS.Store.SeasonScore(c)
+  if seasonScore > 0 then
+    GameTooltip:AddDoubleLine("Rating", tostring(seasonScore), 0.7, 0.7, 0.7, UI.ScoreColor(seasonScore))
+  else
+    GameTooltip:AddDoubleLine("Rating", "N/A this season", 0.7, 0.7, 0.7, 0.6, 0.6, 0.6)
+  end
 
   -- Per-source timestamps
   GameTooltip:AddLine(" ")

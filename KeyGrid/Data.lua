@@ -44,12 +44,24 @@ function Data.CaptureIdentity(c)
   end
 end
 
+-- M+ data isn't there the instant you log in, and GetOverallDungeonScore reads 0
+-- until it arrives. Once the season's map table has landed the API is answering
+-- properly, and from then on a 0 means what it says: no runs this season.
+local function mplusDataReady()
+  if not (C_ChallengeMode and C_ChallengeMode.GetMapTable) then return false end
+  local maps = C_ChallengeMode.GetMapTable()
+  return type(maps) == "table" and #maps > 0
+end
+
 function Data.CaptureScore(c, now)
-  if C_ChallengeMode and C_ChallengeMode.GetOverallDungeonScore then
-    local score = C_ChallengeMode.GetOverallDungeonScore()
-    -- Ignore a 0 (not-ready / mid-logout) so it can't overwrite a cached score.
-    if score and score > 0 then NS.Store.MergeScore(c, score, now, "ingame") end
-  end
+  if not (C_ChallengeMode and C_ChallengeMode.GetOverallDungeonScore) then return end
+  local score = C_ChallengeMode.GetOverallDungeonScore()
+  if not score then return end
+  -- A 0 before the data loads is noise and must not overwrite a cached score;
+  -- a 0 afterwards is a real "hasn't run one this season" and has to land, or
+  -- the row keeps showing a rating the character no longer has.
+  if score == 0 and not mplusDataReady() then return end
+  NS.Store.MergeScore(c, score, now, "ingame", NS.Dungeons.SeasonID())
 end
 
 local function completionEpoch(cd)
