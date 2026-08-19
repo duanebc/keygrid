@@ -19,11 +19,16 @@ jobs:
       - name: Package (no upload)
         uses: BigWigsMods/packager@v2
         with:
+          # -d skips every upload; -l skips @localization@ keyword replacement,
+          # which would otherwise want a CurseForge token just to build.
           args: -d -l
-          # -d skips every upload, -l skips the changelog
 
       - uses: actions/upload-artifact@v4
         with:
           name: KeyGrid-build
           path: .release/*.zip
+          # The packager writes the zip into .release/, and upload-artifact has
+          # skipped anything under a dot-directory since v4.4 unless asked not to.
+          # Without this the upload finds nothing and the line below fails the job.
+          include-hidden-files: true
           if-no-files-found: error
