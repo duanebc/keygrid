@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.2 — 2026-08-20
+
+- First CurseForge release. No addon changes; this tag exists to publish the
+  build that v1.0.1 already produced.
+
 ## v1.0.1 — 2026-08-19
 
 - Mythic+ rating reads **N/A** for a character with no run this season. Ratings

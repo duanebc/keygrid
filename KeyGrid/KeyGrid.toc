@@ -9,9 +9,9 @@
 ## X-Website: https://github.com/duanebc/KeyGrid
 ## X-Category: Character Advancement
 
-# Fill these in after creating each project, then tag a release. The packager
-# reads them to know where to upload; a missing one just skips that host.
-# X-Curse-Project-ID: 000000
+# The packager reads these to know where to upload; a missing one just skips
+# that host. Two hashes = a real TOC directive, one = an inert comment.
+## X-Curse-Project-ID: 1661061
 # X-Wago-ID: 000000
 # X-WoWI-ID: 00000
 
