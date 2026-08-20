@@ -27,6 +27,8 @@ tools/gen_seasonloot.py
 __pycache__/
 *.py[cod]
 
-# Secrets
+# Secrets. The allowlist above already ignores these, but name them anyway: an
+# explicit rule survives someone re-admitting a pattern that would match them.
 .env
 config.toml
+secrets.json
