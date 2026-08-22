@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.0 — 2026-08-21
+## v1.1.0 — 2026-08-22
 
 - **Minimap button.** Left click opens the grid, right click opens the new
   Settings tab, and it drags anywhere around the minimap. Hand-rolled on the
