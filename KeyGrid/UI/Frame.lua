@@ -33,16 +33,42 @@ function UI.ScaleFont(fs, mult)
   fs:SetFont(file or STANDARD_TEXT_FONT, (size or 10) * mult, flags)
 end
 
--- Apply the user's manually-chosen size if they've resized, else the computed one.
+-- Apply the user's manually-chosen size if they've resized, else the computed
+-- one. Width and height fall back independently: switching a column off clears
+-- only the saved width (see Store.SetColHidden), so the window can shrink to fit
+-- without also forgetting a height the user chose.
 function UI.SizeFrame(w, h)
   local f = UI.frame
   if not f then return end
-  local s = NS.Store.DB().ui.size
-  if s and s.w and s.h then
-    f:SetSize(s.w, s.h)
-  else
-    f:SetSize(w, h)
+  local s = NS.Store.DB().ui.size or {}
+  local scale = f:GetScale()
+  if not scale or scale <= 0 then scale = 1 end
+  -- Never compute a frame wider than the screen it has to fit on; at scale 1.5
+  -- every column plus eight dungeons overflows the display.
+  local maxW = (UIParent and UIParent.GetWidth and UIParent:GetWidth() or 1920) / scale
+  f:SetSize(math.min(s.w or w, maxW), s.h or h)
+end
+
+-- Scale is applied before the saved position is restored, and compensated when
+-- changed live: SetPoint offsets are read in the frame's own scaled space, so
+-- scaling after positioning walks the window across the screen.
+function UI.ApplyScale(value)
+  local f = UI.frame
+  if not f then return end
+  value = math.max(0.7, math.min(1.5, tonumber(value) or 1))
+  local old = f:GetScale()
+  if not old or old <= 0 then old = 1 end
+  local point, _, relPoint, x, y = f:GetPoint()
+  f:SetScale(value)
+  if point then
+    local nx, ny = (x or 0) * old / value, (y or 0) * old / value
+    f:ClearAllPoints()
+    f:SetPoint(point, UIParent, relPoint or point, nx, ny)
+    -- Only re-save a point that already existed. Writing one for a user who has
+    -- never dragged the window would quietly defeat /kg reset's "back to centre".
+    if NS.Store.GetPoint() then NS.Store.SavePoint(point, relPoint or point, nx, ny) end
   end
+  NS.Store.DB().ui.scale = value
 end
 
 local BACKDROP = {
@@ -59,7 +85,14 @@ UI.BACKDROP = BACKDROP
 function UI.BuildColumns()
   local cols = {}
   local x = M.PAD
-  local function add(desc) desc.x = x; cols[#cols + 1] = desc; x = x + desc.w end
+  -- The only place columns are filtered. RefreshGrid hands this one list to both
+  -- layoutHeaders and RenderRows, and UI.contentWidth is accumulated here, so
+  -- skipping a column here keeps headers, cells and the window width consistent
+  -- for free. Filtering anywhere else desynchronises col.x from what's drawn.
+  local function add(desc)
+    if desc.id ~= "name" and NS.Store.ColHidden(desc.id) then return end
+    desc.x = x; cols[#cols + 1] = desc; x = x + desc.w
+  end
   add({ id = "name",  label = "Character", w = M.COL_CHAR,  align = "LEFT",   sortable = true })
   add({ id = "ilvl",  label = "iLvl",      w = M.COL_ILVL,  align = "CENTER", sortable = true })
   add({ id = "score", label = "Score",     w = M.COL_SCORE, align = "CENTER", sortable = true })
@@ -74,6 +107,7 @@ function UI.BuildColumns()
     add({ id = dc.mapID, label = dc.abbr, w = M.COL_DUN, align = "CENTER",
           sortable = true, isDungeon = true, mapID = dc.mapID })
   end
+  NS.Store.EnsureSortVisible(cols)
   UI.columns = cols
   UI.contentWidth = x + M.PAD
   return cols
@@ -248,29 +282,44 @@ function UI.EnsureFrame()
   f.gridPanel:SetAllPoints(f.body)
   f.coresPanel = CreateFrame("Frame", nil, f.body)
   f.coresPanel:SetAllPoints(f.body)
-  f.panels = { f.gridPanel, f.coresPanel }
+  f.settingsPanel = CreateFrame("Frame", nil, f.body)
+  f.settingsPanel:SetAllPoints(f.body)
+  f.panels = { f.gridPanel, f.coresPanel, f.settingsPanel }
   -- Void Cores is greyed out until Blizzard settles how cores actually work this
   -- season; the tab stays visible so it's clear the tracking is coming, and the
   -- capture keeps running so the numbers are already there when it's enabled.
+  --
+  -- Settings is assigned before the Loot tab below, so a release build can never
+  -- leave a hole at index 3 with something at 4 -- #tabs would be undefined and
+  -- PanelTemplates_SetNumTabs would get garbage.
   local tabs = {
-    { name = "M+ Grid" },
-    { name = "Void Cores", disabled = true,
+    { id = "grid",  name = "M+ Grid" },
+    { id = "cores", name = "Void Cores", disabled = true,
       reason = "Void Core tracking is on hold until this season's cores are pinned down." },
+    { id = "settings", name = "Settings" },
   }
 
   UI.BuildGridPanel(f, f.gridPanel)
   if UI.BuildCoresPanel then UI.BuildCoresPanel(f, f.coresPanel) end
+  if UI.BuildSettingsPanel then UI.BuildSettingsPanel(f, f.settingsPanel) end
+
+  -- Each panel carries its own refresher, so UI.Refresh never has to know which
+  -- index it is looking at. The functions live in files that load after this
+  -- one, but EnsureFrame runs at the first /kg, long after every file has loaded.
+  f.gridPanel.kgRefresh     = UI.RefreshGrid
+  f.coresPanel.kgRefresh    = UI.RefreshCores
+  f.settingsPanel.kgRefresh = UI.RefreshSettings
 
   -- The Loot tab exists only in a developer checkout (SeasonLoot.lua present)
-  -- with private mode switched on. Released builds have neither, so they get a
-  -- two-tab strip and UI.ShowTab already falls back to tab 1 for a stale
-  -- ui.tab = 3 in SavedVariables.
+  -- with private mode switched on. Released builds have neither, and UI.ShowTab
+  -- falls back to the grid for a saved tabId = "loot" that has nowhere to go.
   if NS.PrivateMode() then
     f.lootPanel = CreateFrame("Frame", nil, f.body)
     f.lootPanel:SetAllPoints(f.body)
-    f.panels[3] = f.lootPanel
-    tabs[3] = { name = "Loot" }
+    f.panels[#f.panels + 1] = f.lootPanel
+    tabs[#tabs + 1] = { id = "loot", name = "Loot" }
     UI.BuildLootPanel(f, f.lootPanel)
+    f.lootPanel.kgRefresh = UI.RefreshLoot
   end
 
   UI.CreateTabs(f, tabs)
@@ -294,8 +343,11 @@ function UI.EnsureFrame()
 
   tinsert(UISpecialFrames, "KeyGridFrame")  -- Escape closes
   UI.frame = f
+  -- Order matters: scale first, because RestorePosition's saved offsets are in
+  -- the frame's own scaled space.
+  UI.ApplyScale(NS.Store.DB().ui.scale or 1)
   UI.RestorePosition()
-  UI.ShowTab(NS.Store.DB().ui.tab or 1)
+  UI.ShowTab(NS.Store.DB().ui.tabId or "grid")
   return f
 end
 
@@ -311,8 +363,11 @@ end
 
 function UI.ResetPosition()
   NS.Store.ClearPoint()
-  NS.Store.DB().ui.size = nil   -- also drop any manual resize
+  NS.Store.DB().ui.size = nil    -- also drop any manual resize
+  NS.Store.DB().ui.scale = 1
   if UI.frame then
+    -- Scale before the point, for the same reason as EnsureFrame.
+    UI.ApplyScale(1)
     UI.frame:ClearAllPoints()
     UI.frame:SetPoint("CENTER")
     UI.Refresh()
@@ -364,14 +419,8 @@ function UI.Refresh()
   if not UI.frame or not UI.frame:IsShown() then return end
   -- Re-read the season each refresh: the API answers a beat after login.
   UI.frame.titleText:SetText(titleText())
-  local tab = NS.Store.DB().ui.tab or 1
-  if tab == 2 and UI.RefreshCores then
-    UI.RefreshCores()
-  elseif tab == 3 and UI.RefreshLoot then
-    UI.RefreshLoot()
-  else
-    UI.RefreshGrid()
-  end
+  local panel = UI.frame.panels[UI.CurrentTabIndex()]
+  if panel and panel.kgRefresh then panel.kgRefresh() else UI.RefreshGrid() end
 end
 
 function UI.RefreshGrid()
@@ -388,7 +437,7 @@ function UI.RefreshGrid()
   NS.UI.RenderRows(f.content, cols, list)
   if #list == 0 then f.empty:Show() else f.empty:Hide() end
 
-  local width = math.max(360, UI.contentWidth + 26)
+  local width = math.max(UI.minWidth or 360, UI.contentWidth + 26)
   local rowsH = math.max(1, #list) * M.ROW_H
   f.content:SetSize(UI.contentWidth, rowsH)
   local chrome = M.TITLE_H + M.SUBHDR_H + M.COLHDR_H + M.FOOTER_H + M.TABSTRIP_H + 16
@@ -400,7 +449,7 @@ function UI.Show()
   UI.EnsureFrame()
   UI.frame:Show()
   if NS.Data then NS.Data.CaptureAll("open") end
-  UI.ShowTab(NS.Store.DB().ui.tab or 1)
+  UI.ShowTab(NS.Store.DB().ui.tabId or "grid")
 end
 
 function UI.Hide()

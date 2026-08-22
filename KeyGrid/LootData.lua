@@ -182,7 +182,7 @@ NS.On("ITEM_DATA_LOAD_RESULT", function()
     refreshQueued = false
     local UI = NS.UI
     if UI and UI.frame and UI.frame:IsShown()
-       and (NS.Store.DB().ui.tab == 3) and UI.RefreshLoot then
+       and (UI.ActiveTabId() == "loot") and UI.RefreshLoot then
       UI.RefreshLoot()
     end
   end)
@@ -236,7 +236,7 @@ function L.StoreVoidcache(dungeonName, items)
   c.voidcacheAt = GetServerTime()
   local UI = NS.UI
   if UI and UI.frame and UI.frame:IsShown()
-     and NS.Store.DB().ui.tab == 3 and UI.RefreshLoot then
+     and UI.ActiveTabId() == "loot" and UI.RefreshLoot then
     UI.RefreshLoot()
   end
   return true

@@ -47,6 +47,8 @@ local function usage()
   NS.Print("Commands:")
   NS.Print("  /kg                  toggle the window")
   NS.Print("  /kg grid             open the M+ grid tab")
+  NS.Print("  /kg settings         open the Settings tab")
+  NS.Print("  /kg minimap          toggle the minimap button")
   NS.Print("  /kg sync             how to run keygrid-sync (fills in alts)")
   NS.Print("  /kg all              toggle showing zero-score characters")
   NS.Print("  /kg hide Name-Realm  hide a row")
@@ -67,6 +69,8 @@ local function usage()
   --@end-debug@
 end
 
+NS.PrintUsage = usage
+
 SlashCmdList["KEYGRID"] = function(msg)
   msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
   local cmd, rest = msg:match("^(%S*)%s*(.-)$")
@@ -75,14 +79,20 @@ SlashCmdList["KEYGRID"] = function(msg)
   if cmd == "" then
     NS.UI.Toggle()
   elseif cmd == "grid" then
-    NS.UI.Show(); NS.UI.ShowTab(1)
+    NS.UI.Show(); NS.UI.ShowTab("grid")
+  elseif cmd == "settings" or cmd == "options" then
+    NS.UI.Show(); NS.UI.ShowTab("settings")
+  elseif cmd == "minimap" then
+    local shown = not NS.MinimapShown()
+    NS.SetMinimapShown(shown)
+    NS.Print("Minimap button: " .. (shown and "shown" or "hidden"))
   elseif cmd == "sync" then
     syncHelp()
   elseif cmd == "cores" then
     -- Tab 2 is greyed out this season (see UI/Frame.lua); ShowTab would silently
     -- bounce back to the grid, so say why instead.
     NS.Print("The Void Cores tab is disabled — how cores work this season isn't pinned down yet.")
-    NS.UI.Show(); NS.UI.ShowTab(1)
+    NS.UI.Show(); NS.UI.ShowTab("grid")
   --@debug@
   elseif cmd == "private" then
     if not NS.LootAvailable() then
@@ -95,7 +105,7 @@ SlashCmdList["KEYGRID"] = function(msg)
     end
   elseif cmd == "loot" then
     if NS.PrivateMode() then
-      NS.UI.Show(); NS.UI.ShowTab(3)
+      NS.UI.Show(); NS.UI.ShowTab("loot")
     else
       NS.Print("Loot tab is off. Enable it with /kg private, then /reload.")
     end
@@ -103,7 +113,7 @@ SlashCmdList["KEYGRID"] = function(msg)
     local ui = NS.Store.DB().ui
     ui.lootHideCollected = not ui.lootHideCollected
     NS.Print("Loot tab: " .. (ui.lootHideCollected and "hiding items you've looted" or "showing all items"))
-    if NS.PrivateMode() then NS.UI.Show(); NS.UI.ShowTab(3) end
+    if NS.PrivateMode() then NS.UI.Show(); NS.UI.ShowTab("loot") end
   elseif cmd == "dump" then
     NS.Dungeons.Dump()
   elseif cmd == "curdump" then
@@ -132,7 +142,7 @@ SlashCmdList["KEYGRID"] = function(msg)
     NS.Print("Captured " .. (NS.PlayerKey() or "current character") .. ".")
   elseif cmd == "reset" then
     if NS.UI.ResetPosition then NS.UI.ResetPosition() end
-    NS.Print("Window position reset.")
+    NS.Print("Window position, size and scale reset.")
   elseif cmd == "debug" then
     NS.debug = not NS.debug
     NS.Print("Debug: " .. (NS.debug and "ON" or "OFF"))

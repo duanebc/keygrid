@@ -4,7 +4,7 @@
 ## Author: Duane
 ## Version: @project-version@
 ## SavedVariables: KeyGridDB
-## IconTexture: Interface\Icons\INV_Relics_Hourglass
+## IconTexture: Interface\AddOns\KeyGrid\Media\KeyGridIcon
 ## X-License: MIT
 ## X-Website: https://github.com/duanebc/KeyGrid
 ## X-Category: Character Advancement
@@ -27,8 +27,10 @@ LootData.lua
 Store.lua
 Data.lua
 Config.lua
+Minimap.lua
 UI\Frame.lua
 UI\Tabs.lua
+UI\Settings.lua
 UI\Grid.lua
 UI\CoresGrid.lua
 #@debug@

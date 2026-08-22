@@ -2,9 +2,14 @@
 -- Bottom tab strip. Pattern per Blizzard's CharacterFrameTabTemplate +
 -- PanelTemplates_* (tab buttons must be named "<frameName>TabN").
 --
--- CreateTabs takes { {name=, disabled=, reason=}, ... }. A disabled tab stays in
--- the strip, greyed and unclickable, and says why on hover -- PanelTemplates_*
--- honours tab.isDisabled, so selecting another tab never re-enables it.
+-- CreateTabs takes { {id=, name=, disabled=, reason=}, ... }. Tabs are addressed
+-- by their string id, never by index: the strip gains a Loot tab in a developer
+-- checkout and loses it in a release, so index 3 means different things in
+-- different builds. The saved tab is an id for the same reason.
+--
+-- A disabled tab stays in the strip, greyed and unclickable, and says why on
+-- hover -- PanelTemplates_* honours tab.isDisabled, so selecting another tab
+-- never re-enables it.
 
 local ADDON, NS = ...
 NS.UI = NS.UI or {}
@@ -29,7 +34,10 @@ end
 
 function UI.CreateTabs(f, tabs)
   f.Tabs = {}
+  f.tabDefs = tabs
+  UI.tabIndex = {}
   for i, def in ipairs(tabs) do
+    UI.tabIndex[def.id] = i
     local tab = CreateFrame("Button", "KeyGridFrameTab" .. i, f, "CharacterFrameTabTemplate")
     tab:SetID(i)
     tab:SetText(def.name)
@@ -51,26 +59,59 @@ function UI.CreateTabs(f, tabs)
       disableTab(f, f.Tabs[i], i)
     end
   end
+  -- The strip is laid out left to right and never wraps, so with four tabs it,
+  -- not the columns, sets how narrow the window may get. Measured next frame:
+  -- PanelTemplates_TabResize runs in a pcall above and widths settle after it.
+  NS.After(0, function() UI.MeasureTabStrip(f) end)
+end
+
+-- Narrowest the window can be without the tab strip spilling past its edge.
+UI.minWidth = 360
+
+function UI.MeasureTabStrip(f)
+  local last = f and f.Tabs and f.Tabs[#f.Tabs]
+  if not (last and last.GetRight and f.GetLeft) then return end
+  local right, left = last:GetRight(), f:GetLeft()
+  if not (right and left) then return end
+  UI.minWidth = math.max(360, math.ceil(right - left) + 12)
+  if f.SetResizeBounds then pcall(f.SetResizeBounds, f, UI.minWidth, 180) end
+end
+
+function UI.TabIndex(id)
+  if type(id) == "number" then return id end
+  return UI.tabIndex and UI.tabIndex[id]
+end
+
+function UI.CurrentTabIndex()
+  return UI.TabIndex(NS.Store.DB().ui.tabId or "grid") or 1
+end
+
+function UI.ActiveTabId()
+  local f = UI.frame
+  if not (f and f.tabDefs) then return NS.Store.DB().ui.tabId or "grid" end
+  local def = f.tabDefs[UI.CurrentTabIndex()]
+  return def and def.id or "grid"
 end
 
 function UI.TabDisabled(n)
   local f = UI.frame
-  local tab = f and f.Tabs and f.Tabs[n]
+  local tab = f and f.Tabs and f.Tabs[UI.TabIndex(n)]
   return tab and tab.isDisabled and true or false
 end
 
-function UI.ShowTab(n)
+-- Accepts an id ("settings") or an index. Falls back to the grid for a tab that
+-- doesn't exist in this build or has been switched off since it was saved.
+function UI.ShowTab(which)
   local f = UI.frame
   if not f then return end
-  n = n or 1
-  -- Fall back to the grid for a tab that no longer exists (a released build
-  -- reading a dev SavedVariables) or one that's been switched off since.
-  if not f.panels[n] or UI.TabDisabled(n) then n = 1 end
+  local n = UI.TabIndex(which or "grid")
+  if not n or not f.panels[n] or UI.TabDisabled(n) then n = 1 end
 
   if PanelTemplates_SetTab then pcall(PanelTemplates_SetTab, f, n) end
   for i, panel in ipairs(f.panels) do
     if i == n then panel:Show() else panel:Hide() end
   end
-  NS.Store.DB().ui.tab = n
+  local def = f.tabDefs and f.tabDefs[n]
+  NS.Store.DB().ui.tabId = (def and def.id) or "grid"
   UI.Refresh()
 end

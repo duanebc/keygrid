@@ -6,7 +6,7 @@ local ADDON, NS = ...
 local Store = {}
 NS.Store = Store
 
-local SCHEMA_VERSION = 1
+local SCHEMA_VERSION = 2
 local WEEK = 7 * 24 * 3600
 
 local DEFAULTS = {
@@ -19,8 +19,26 @@ local DEFAULTS = {
   currencyIDs = {},
   -- privateMode gates the developer-only Loot tab; it has no effect in a
   -- released build, where SeasonLoot.lua and UI/LootGrid.lua are not shipped.
-  ui      = { sortKey = "score", sortDir = "desc", point = nil, hidden = {}, showAll = false, tab = 1, privateMode = false, lootSpec = {}, lootHideCollected = true, lootSlot = "all" },
+  --
+  -- hidden = hidden CHARACTERS, hiddenCols = hidden COLUMNS. Two different
+  -- things one letter apart; don't reach for the wrong one.
+  --
+  -- tabId is a string, not an index: the tab strip gains and loses a Loot tab
+  -- depending on the build, so a saved number means different things in
+  -- different checkouts.
+  ui = {
+    sortKey = "score", sortDir = "desc", point = nil,
+    hidden = {}, hiddenCols = {}, showAll = false,
+    tabId = "grid", scale = 1,
+    minimap = { angle = 200, hide = false, locked = false },
+    privateMode = false, lootSpec = {}, lootHideCollected = true, lootSlot = "all",
+  },
 }
+
+-- Columns the user may switch off. Character is excluded on purpose (it carries
+-- the class colour and the row tooltip, so a row without it is anonymous), as
+-- are Score and Key -- they're the reason the addon exists.
+Store.OPTIONAL_COLUMNS = { "ilvl", "vault", "crest", "coins", "marl", "manaflux", "sparkdust" }
 
 local function applyDefaults(db, defaults)
   for k, v in pairs(defaults) do
@@ -35,10 +53,24 @@ end
 
 function Store.Init()
   KeyGridDB = KeyGridDB or {}
+  -- Read the old shape BEFORE applyDefaults fills the gaps in, or every
+  -- migration below sees a table that already looks migrated.
+  local fresh = next(KeyGridDB) == nil
+  local prev = KeyGridDB.version or 0
+  local legacyTab = KeyGridDB.ui and KeyGridDB.ui.tab
+
   applyDefaults(KeyGridDB, DEFAULTS)
-  if (KeyGridDB.version or 0) < SCHEMA_VERSION then
-    KeyGridDB.version = SCHEMA_VERSION
+
+  -- v1 persisted the tab as an index, and index 3 meant the Loot tab -- but only
+  -- in a developer checkout. Settings now occupies 3 in every build, so a stale
+  -- number would silently drop people onto a tab they never chose.
+  if not fresh and prev < 2 and type(legacyTab) == "number" then
+    KeyGridDB.ui.tabId = (legacyTab == 2 and "cores")
+      or (legacyTab == 3 and "loot")
+      or "grid"
   end
+  KeyGridDB.ui.tab = nil
+  KeyGridDB.version = SCHEMA_VERSION
   -- Records written before scores were season-stamped have no high-water mark;
   -- seed it from the cached score so the roster filter behaves unchanged. The
   -- score itself stays unstamped, so it reads as "not this season" until the
@@ -291,6 +323,68 @@ function Store.CharList()
   Store.SortList(out)
   return out
 end
+
+--------------------------------------------------------------------------------
+-- Column visibility
+--------------------------------------------------------------------------------
+function Store.ColHidden(id) return KeyGridDB.ui.hiddenCols[id] == true end
+
+function Store.SetColHidden(id, hidden)
+  KeyGridDB.ui.hiddenCols[id] = hidden and true or nil
+  -- A manually resized window keeps its width forever (see UI.SizeFrame), so
+  -- hiding a column would visibly do nothing. Drop the saved width and let the
+  -- computed one take over; the saved height is left alone.
+  local size = KeyGridDB.ui.size
+  if size then size.w = nil end
+end
+
+function Store.ShowAllColumns()
+  KeyGridDB.ui.hiddenCols = {}
+  local size = KeyGridDB.ui.size
+  if size then size.w = nil end
+end
+
+-- Sorting by a column nobody can see is a trap: no arrow is drawn and there's no
+-- header left to click, so the roster order looks random with no way out. Fall
+-- back to the first sortable column that is actually on screen.
+--
+-- Called from UI.BuildColumns rather than from the checkbox handler, because the
+-- dungeon set arrives asynchronously after login -- a sort key can go invisible
+-- with no user action at all.
+function Store.EnsureSortVisible(cols)
+  local key = KeyGridDB.ui.sortKey
+  local first
+  for _, c in ipairs(cols) do
+    if c.sortable then
+      if c.id == key then return false end
+      first = first or c.id
+    end
+  end
+  KeyGridDB.ui.sortKey = first or "name"
+  KeyGridDB.ui.sortDir = (KeyGridDB.ui.sortKey == "name") and "asc" or "desc"
+  return true
+end
+
+--------------------------------------------------------------------------------
+-- Every known character, filtered by nothing.
+--
+-- Store.CharList hides characters that are hidden or have never scored, which is
+-- exactly the set the Settings tab has to show -- you cannot un-hide a row you
+-- cannot see.
+--------------------------------------------------------------------------------
+function Store.AllChars()
+  local out = {}
+  for key, c in pairs(KeyGridDB.chars) do
+    c._key = key            -- CharList sets this as a side effect; cells rely on it
+    out[#out + 1] = c
+  end
+  table.sort(out, function(a, b)
+    return (a.name or a._key or ""):lower() < (b.name or b._key or ""):lower()
+  end)
+  return out
+end
+
+function Store.Forget(key) KeyGridDB.chars[key] = nil end
 
 function Store.Hide(key)   KeyGridDB.ui.hidden[key] = true end
 function Store.Unhide(key) KeyGridDB.ui.hidden[key] = nil end

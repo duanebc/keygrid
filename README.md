@@ -24,6 +24,10 @@ and shows all of them together, account-wide.
 Sortable by any column. Characters with no score are hidden by default (`/kg all`
 shows them). The season shown in the title bar is read from the game.
 
+**Settings tab** — column visibility, window scale, the minimap button, and a
+character list you can tick rows out of, alongside in-game help explaining the
+snapshot model. Reachable from the minimap button (right click) or `/kg settings`.
+
 **Void Cores tab** — collected / on-hand / spent / remaining / earned-this-week per
 character. **Currently disabled**: how Void Cores work this season isn't settled
 yet, so the tab is greyed out. KeyGrid still captures the numbers, so switching it
@@ -40,6 +44,8 @@ CurseForge, Wago, or WoWInterface via your addon manager, or grab the zip from
 ```
 /kg              toggle the window          (/keys and /keygrid also work)
 /kg grid         open the M+ Grid tab
+/kg settings     open the Settings tab
+/kg minimap      show/hide the minimap button
 /kg sync         print how to set up and run keygrid-sync
 /kg all          show/hide zero-score characters
 /kg hide Name-Realm    hide a row

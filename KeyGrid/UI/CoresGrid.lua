@@ -137,7 +137,7 @@ function UI.RefreshCores()
     f.coresFooter:SetText("Void Cores id not found — run /kg curdump, then paste it into Currencies.lua")
   end
 
-  local width = math.max(360, (UI.coresWidth or 500) + 26)
+  local width = math.max(UI.minWidth or 360, (UI.coresWidth or 500) + 26)
   local rowsH = math.max(1, #list) * M.ROW_H
   f.coresContent:SetSize(UI.coresWidth or 500, rowsH)
   local chrome = M.TITLE_H + M.COLHDR_H + M.FOOTER_H + M.TABSTRIP_H + 20

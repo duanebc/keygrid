@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.0 — 2026-08-21
+
+- **Minimap button.** Left click opens the grid, right click opens the new
+  Settings tab, and it drags anywhere around the minimap. Hand-rolled on the
+  Blizzard API — no LibDBIcon, no LibStub, nothing embedded.
+- **Settings tab** gathering every option in one place: show characters with no
+  score, per-column visibility, window scale, the minimap button, and a
+  character list you can tick rows out of instead of typing `/kg hide`.
+- In-game help explaining how the snapshot model works, with a copyable link for
+  reporting bugs.
+- `/kg settings` and `/kg minimap` added; `/kg reset` now also restores scale.
+- Columns you switch off shrink the window to fit rather than leaving a gap.
+
 ## v1.0.2 — 2026-08-20
 
 - First CurseForge release. No addon changes; this tag exists to publish the
