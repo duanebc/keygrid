@@ -20,25 +20,17 @@ local DEFAULTS = {
   -- privateMode gates the developer-only Loot tab; it has no effect in a
   -- released build, where SeasonLoot.lua and UI/LootGrid.lua are not shipped.
   --
-  -- hidden = hidden CHARACTERS, hiddenCols = hidden COLUMNS. Two different
-  -- things one letter apart; don't reach for the wrong one.
-  --
   -- tabId is a string, not an index: the tab strip gains and loses a Loot tab
   -- depending on the build, so a saved number means different things in
   -- different checkouts.
   ui = {
     sortKey = "score", sortDir = "desc", point = nil,
-    hidden = {}, hiddenCols = {}, showAll = false,
+    hidden = {}, showAll = false,
     tabId = "grid", scale = 1,
     minimap = { angle = 200, hide = false, locked = false },
     privateMode = false, lootSpec = {}, lootHideCollected = true, lootSlot = "all",
   },
 }
-
--- Columns the user may switch off. Character is excluded on purpose (it carries
--- the class colour and the row tooltip, so a row without it is anonymous), as
--- are Score and Key -- they're the reason the addon exists.
-Store.OPTIONAL_COLUMNS = { "ilvl", "vault", "crest", "coins", "marl", "manaflux", "sparkdust" }
 
 local function applyDefaults(db, defaults)
   for k, v in pairs(defaults) do
@@ -324,33 +316,10 @@ function Store.CharList()
   return out
 end
 
---------------------------------------------------------------------------------
--- Column visibility
---------------------------------------------------------------------------------
-function Store.ColHidden(id) return KeyGridDB.ui.hiddenCols[id] == true end
-
-function Store.SetColHidden(id, hidden)
-  KeyGridDB.ui.hiddenCols[id] = hidden and true or nil
-  -- A manually resized window keeps its width forever (see UI.SizeFrame), so
-  -- hiding a column would visibly do nothing. Drop the saved width and let the
-  -- computed one take over; the saved height is left alone.
-  local size = KeyGridDB.ui.size
-  if size then size.w = nil end
-end
-
-function Store.ShowAllColumns()
-  KeyGridDB.ui.hiddenCols = {}
-  local size = KeyGridDB.ui.size
-  if size then size.w = nil end
-end
-
--- Sorting by a column nobody can see is a trap: no arrow is drawn and there's no
--- header left to click, so the roster order looks random with no way out. Fall
--- back to the first sortable column that is actually on screen.
---
--- Called from UI.BuildColumns rather than from the checkbox handler, because the
--- dungeon set arrives asynchronously after login -- a sort key can go invisible
--- with no user action at all.
+-- A sort key can name a column that is no longer on screen -- the season's
+-- dungeon set rotates, and the saved key may be last season's mapID. Sorting by
+-- it draws no arrow anywhere and leaves the roster in an order nothing explains,
+-- so fall back to the first sortable column that is actually present.
 function Store.EnsureSortVisible(cols)
   local key = KeyGridDB.ui.sortKey
   local first

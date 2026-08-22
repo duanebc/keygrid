@@ -34,9 +34,8 @@ function UI.ScaleFont(fs, mult)
 end
 
 -- Apply the user's manually-chosen size if they've resized, else the computed
--- one. Width and height fall back independently: switching a column off clears
--- only the saved width (see Store.SetColHidden), so the window can shrink to fit
--- without also forgetting a height the user chose.
+-- one. Width and height fall back independently, so a saved value for one does
+-- not pin the other.
 function UI.SizeFrame(w, h)
   local f = UI.frame
   if not f then return end
@@ -85,14 +84,7 @@ UI.BACKDROP = BACKDROP
 function UI.BuildColumns()
   local cols = {}
   local x = M.PAD
-  -- The only place columns are filtered. RefreshGrid hands this one list to both
-  -- layoutHeaders and RenderRows, and UI.contentWidth is accumulated here, so
-  -- skipping a column here keeps headers, cells and the window width consistent
-  -- for free. Filtering anywhere else desynchronises col.x from what's drawn.
-  local function add(desc)
-    if desc.id ~= "name" and NS.Store.ColHidden(desc.id) then return end
-    desc.x = x; cols[#cols + 1] = desc; x = x + desc.w
-  end
+  local function add(desc) desc.x = x; cols[#cols + 1] = desc; x = x + desc.w end
   add({ id = "name",  label = "Character", w = M.COL_CHAR,  align = "LEFT",   sortable = true })
   add({ id = "ilvl",  label = "iLvl",      w = M.COL_ILVL,  align = "CENTER", sortable = true })
   add({ id = "score", label = "Score",     w = M.COL_SCORE, align = "CENTER", sortable = true })

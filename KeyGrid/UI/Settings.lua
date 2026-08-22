@@ -3,8 +3,8 @@
 --
 -- Controls bind to the DB through get/set closures rather than a flat key name,
 -- because KeyGrid's settings are variously nested (ui.minimap.hide), inverted
--- (hiddenCols means hidden, the checkbox means shown) or keyed by a dynamic id,
--- and a single key name cannot express any of that.
+-- (the box says "show", the DB stores "hide") or keyed by a dynamic character
+-- id, and a single key name cannot express any of that.
 --
 -- Two collections of checkboxes, deliberately kept apart: `statics` are built
 -- once and re-read from the DB on every refresh, while character rows are pooled
@@ -80,27 +80,20 @@ local function MakeButton(parent, label, x, y, w, onClick)
   return b
 end
 
--- OptionsSliderTemplate reaches for _G[name .. "Low"/"High"/"Text"], so this is
--- the one widget in the addon that cannot stay anonymous.
-local function MakeSlider(parent, name, label, x, y, minV, maxV, step, set, onRelease)
-  local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
-  s:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-  s:SetWidth(200)
-  s:SetMinMaxValues(minV, maxV)
-  s:SetValueStep(step)
-  if s.SetObeyStepOnDrag then s:SetObeyStepOnDrag(true) end
-  if _G[name .. "Low"] then _G[name .. "Low"]:SetText("") end
-  if _G[name .. "High"] then _G[name .. "High"]:SetText("") end
-  local text = _G[name .. "Text"]
-  s:SetScript("OnValueChanged", function(self, value)
-    value = math.floor(value / step + 0.5) * step
-    if text then text:SetText(("%s: %d%%"):format(label, math.floor(value * 100 + 0.5))) end
-    set(value)
-  end)
-  -- The saved point is only re-read on mouse-up: SetClampedToScreen can nudge
-  -- the window mid-drag without ever firing OnDragStop.
-  s:SetScript("OnMouseUp", function() if onRelease then onRelease() end end)
-  return s
+-- A number you type and commit, rather than a slider. A slider over this range
+-- moves the whole window on every pixel of drag, which is unusable in practice;
+-- typing 110 and pressing Enter is precise and stays still until you ask.
+local function MakeNumberField(parent, name, x, y, onCommit)
+  local edit = CreateFrame("EditBox", name, parent, "InputBoxTemplate")
+  edit:SetSize(48, 20)
+  edit:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+  edit:SetAutoFocus(false)
+  edit:SetNumeric(true)
+  edit:SetMaxLetters(3)
+  edit:SetJustifyH("CENTER")
+  edit:SetScript("OnEnterPressed", function(self) onCommit(self) end)
+  edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); UI.RefreshSettings() end)
+  return edit
 end
 
 --------------------------------------------------------------------------------
@@ -182,44 +175,46 @@ function UI.BuildSettingsPanel(f, panel)
     function(v) NS.Store.DB().ui.showAll = v end)
   y = y - 30
 
-  MakeSlider(content, "KeyGridScaleSlider", "Window scale", X + 4, y - 10,
-    0.7, 1.5, 0.05,
-    function(v) UI.ApplyScale(v) end,
-    function()
-      local fr = UI.frame
-      if fr and NS.Store.GetPoint() then
-        local p, _, rp, px, py = fr:GetPoint()
-        if p then NS.Store.SavePoint(p, rp or p, px, py) end
-      end
-    end)
-  y = y - 54
+  local scaleLabel = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  scaleLabel:SetPoint("TOPLEFT", content, "TOPLEFT", X + 2, y - 4)
+  scaleLabel:SetText("Window scale")
 
-  -- Columns -------------------------------------------------------------------
-  heading(content, "COLUMNS", X, y)
-  y = y - 18
-  body(content, "Switching a column off resizes the window to fit what is left.", X, y, 430)
-  y = y - 24
+  local commitScale
+  f.settingsScaleEdit = MakeNumberField(content, "KeyGridScaleInput", X + 104, y,
+    function(self) commitScale() end)
 
-  local labels = {
-    ilvl = "iLvl", vault = "Vault", crest = "Crest",
-    coins = "Coins", marl = "Marl", manaflux = "Flux", sparkdust = "Dust",
-  }
-  local index, startY = 0, y
-  for _, id in ipairs(NS.Store.OPTIONAL_COLUMNS) do
-    local cx = X + (index % 3) * 140
-    local cy = startY - math.floor(index / 3) * 24
-    MakeCheck(content, labels[id] or id, nil, cx, cy,
-      function() return not NS.Store.ColHidden(id) end,
-      function(v) NS.Store.SetColHidden(id, not v) end)
-    index = index + 1
-  end
-  y = startY - (math.ceil(index / 3) * 24) - 8
+  local pct = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  pct:SetPoint("LEFT", f.settingsScaleEdit, "RIGHT", 4, 0)
+  pct:SetText("%")
 
-  MakeButton(content, "Show all columns", X, y, 140, function()
-    NS.Store.ShowAllColumns()
+  commitScale = function()
+    local edit = f.settingsScaleEdit
+    local want = tonumber(edit:GetText())
+    -- An empty or silly value snaps back to what is actually in effect rather
+    -- than to some default the user never chose.
+    if not want then
+      UI.RefreshSettings()
+      edit:ClearFocus()
+      return
+    end
+    want = math.max(70, math.min(150, want))
+    edit:ClearFocus()
+    UI.ApplyScale(want / 100)
+    -- Re-read the point from the frame: SetClampedToScreen may have corrected it.
+    local fr = UI.frame
+    if fr and NS.Store.GetPoint() then
+      local p, _, rp, px, py = fr:GetPoint()
+      if p then NS.Store.SavePoint(p, rp or p, px, py) end
+    end
     UI.RefreshSettings()
     UI.Refresh()
-  end)
+  end
+
+  MakeButton(content, "Set", X + 150, y - 1, 50, commitScale)
+
+  local hint = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  hint:SetPoint("LEFT", content, "TOPLEFT", X + 208, y - 11)
+  hint:SetText("70-150%, Enter or Set to apply")
   y = y - 34
 
   -- Minimap -------------------------------------------------------------------
@@ -319,12 +314,8 @@ function UI.RefreshSettings()
   for _, cb in ipairs(statics) do
     cb:SetChecked(cb.__get() and true or false)
   end
-  local slider = _G["KeyGridScaleSlider"]
-  if slider then
-    local v = ui.scale or 1
-    slider:SetValue(v)
-    local text = _G["KeyGridScaleSliderText"]
-    if text then text:SetText(("Window scale: %d%%"):format(math.floor(v * 100 + 0.5))) end
+  if f.settingsScaleEdit and not f.settingsScaleEdit:HasFocus() then
+    f.settingsScaleEdit:SetText(tostring(math.floor((ui.scale or 1) * 100 + 0.5)))
   end
 
   -- Character list. Sourced from every known character rather than
