@@ -37,7 +37,7 @@ ignore:
     - TheAnnouncer
     - HeartyHelper
     - NaigtalFlightNodes
-    - PugRater-project
+    - PugRoster-project
     - screenshots
     - docs
     - _tools
