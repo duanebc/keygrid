@@ -216,6 +216,12 @@ local function renderCell(row, cell, col, c)
         sub = ("%d/%d"):format(rec.weekly or 0, weeklyCap)
       elseif cap > 0 then
         sub = ("%d/%d"):format(UI.CapProgress(rec), cap)
+      elseif (rec.collected or 0) > n then
+        -- No cap to measure against, but a season total worth knowing anyway:
+        -- holding one spark having earned five is a different season from
+        -- holding one having earned one, and the cell said the same thing for
+        -- both. Prefixed so it cannot be misread as a fraction.
+        sub = ("+%s"):format(UI.ShortNum(rec.collected))
       end
       if sub then
         cell.big:ClearAllPoints()

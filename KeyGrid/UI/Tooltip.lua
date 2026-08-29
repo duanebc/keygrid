@@ -324,7 +324,14 @@ function UI.ShowCurrencyTooltip(anchor, c, field, title, tint)
     -- what's on hand the game simply isn't counting, and "Collected 0" beside
     -- "On hand 6200" is worse than saying nothing.
     if (rec.collected or 0) >= (rec.have or 0) then
-      GameTooltip:AddDoubleLine("Collected", tostring(rec.collected or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+      -- "Collected" does not say when. A currency the game caps or measures per
+      -- season resets its earned total with the season, so for those it is
+      -- specifically this season's -- which is the useful reading, and the one
+      -- that makes the number beside it mean something. For anything else the
+      -- scope is not ours to claim.
+      local seasonal = rec.useEarnedCap or (UI.SeasonCap(rec) > 0)
+      GameTooltip:AddDoubleLine(seasonal and "Gained this season" or "Collected",
+        tostring(rec.collected or 0), 0.7, 0.7, 0.7, 1, 1, 1)
       GameTooltip:AddDoubleLine("Spent", tostring(rec.spent or 0), 0.7, 0.7, 0.7, 1, 1, 1)
     end
     local cap = UI.SeasonCap(rec)
