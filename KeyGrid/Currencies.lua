@@ -1,6 +1,6 @@
 -- KeyGrid/Currencies.lua
 -- Resolve, snapshot + dump the gearing currencies (Corrosive Coins, Voidlight
--- Marl, Venomblight Manaflux, Tidal Spark Dust, Void Cores, and the crest set).
+-- Marl, Venomblight Manaflux, Spark of Tides, Void Cores, and the crest set).
 --
 -- Resolution is the hard part. The in-game currency list (GetCurrencyListInfo)
 -- only contains currencies THIS character has earned, and the Currency tab's
@@ -21,12 +21,12 @@ NS.Currencies = C
 
 -- Fill from /kg curdump to pin an id permanently. Left nil = resolve at runtime.
 NS.CURRENCY = {
-  VOIDCORES = nil, COINS = nil, MARL = nil, MANAFLUX = nil, SPARKDUST = nil,
+  VOIDCORES = nil, COINS = nil, MARL = nil, MANAFLUX = nil, SPARK = nil,
 }
 
 -- Fill if one of these turns out to be a bag item rather than a currency
 -- (see C.ItemSnapshot). Left nil = discover it by name from bags.
-NS.ITEM = { MARL = nil, MANAFLUX = nil, SPARKDUST = nil }
+NS.ITEM = { MARL = nil, MANAFLUX = nil, SPARK = nil }
 
 -- Name matchers, deliberately loose so a rename/plural/spacing change still hits.
 -- key -> {
@@ -55,10 +55,13 @@ local DEFS = {
     match = function(n) return n:find("manaflux", 1, true) or n:find("venomblight", 1, true) end,
     item  = "manaflux",
   },
-  SPARKDUST = {
-    label = "Tidal Spark Dust",
-    match = function(n) return n:find("spark", 1, true) and n:find("dust", 1, true) end,
-    item  = "spark dust",
+  -- Spark of Tides, not the dust it is made from. The dust is an ingredient you
+  -- accumulate and spend; the spark is the thing you actually have or have not
+  -- got when a craft is waiting on one, which is the number worth a column.
+  SPARK = {
+    label = "Spark of Tides",
+    match = function(n) return n:find("spark", 1, true) and n:find("tides", 1, true) end,
+    item  = "spark of tides",
   },
 }
 C.DEFS = DEFS
@@ -76,7 +79,7 @@ C.COLUMNS = {
   { key = "MARL",      id = "marl",      label = "Marl",  w = 52, color = { 0.72, 0.58, 0.95 },
     roster = true },
   { key = "MANAFLUX",  id = "manaflux",  label = "Flux",  w = 52, color = { 0.45, 0.95, 0.65 } },
-  { key = "SPARKDUST", id = "sparkdust", label = "Dust",  w = 56, color = { 0.45, 0.85, 1.00 },
+  { key = "SPARK",     id = "spark",     label = "Spark", w = 56, color = { 0.45, 0.85, 1.00 },
     style = "capped" },
 }
 
@@ -538,7 +541,7 @@ end
 --------------------------------------------------------------------------------
 -- Diagnostics
 --------------------------------------------------------------------------------
-local DUMP_ORDER = { "VOIDCORES", "COINS", "MARL", "MANAFLUX", "SPARKDUST" }
+local DUMP_ORDER = { "VOIDCORES", "COINS", "MARL", "MANAFLUX", "SPARK" }
 
 local function printResolved()
   NS.Print("Resolved (account-wide cache):")
