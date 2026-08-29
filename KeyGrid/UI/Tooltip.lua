@@ -302,21 +302,11 @@ function UI.ShowCurrencyTooltip(anchor, c, field, title, tint)
   end
 
   GameTooltip:AddLine(" ")
+  -- The numbers first and together: on hand, what the season has given, what has
+  -- gone. Anything about *how* it is tracked -- the id, the transfer rules -- is
+  -- below them, because it is context for the reader who goes looking rather
+  -- than the answer they opened the tooltip for.
   GameTooltip:AddDoubleLine("On hand", tostring(rec.have or 0), 0.7, 0.7, 0.7, r, g, b)
-  if rec.id then
-    GameTooltip:AddDoubleLine("Currency id", tostring(rec.id), 0.45, 0.45, 0.45, 0.6, 0.6, 0.6)
-  end
-  if rec.accountWide then
-    GameTooltip:AddLine("Account-wide — the same pool on every character.", 0.55, 0.75, 1)
-  elseif rec.transferable then
-    local pct = tonumber(rec.transferPct)
-    if pct and pct > 0 and pct < 100 then
-      GameTooltip:AddLine(("Per character — transferable to another character (%d%% arrives)."):format(pct),
-        0.55, 0.75, 1)
-    else
-      GameTooltip:AddLine("Per character — transferable to another character.", 0.55, 0.75, 1)
-    end
-  end
   if rec.source == "item" then
     GameTooltip:AddLine("Tracked as a bag reagent (bags + banks).", 0.55, 0.75, 1)
   else
@@ -346,6 +336,21 @@ function UI.ShowCurrencyTooltip(anchor, c, field, title, tint)
       GameTooltip:AddDoubleLine("This week", ("%d / %d"):format(rec.weekly or 0, rec.weeklyCap),
         0.7, 0.7, 0.7, 1, 1, 1)
     end
+  end
+
+  if rec.accountWide then
+    GameTooltip:AddLine("Account-wide — the same pool on every character.", 0.55, 0.75, 1)
+  elseif rec.transferable then
+    local pct = tonumber(rec.transferPct)
+    if pct and pct > 0 and pct < 100 then
+      GameTooltip:AddLine(("Per character — transferable to another character (%d%% arrives)."):format(pct),
+        0.55, 0.75, 1)
+    else
+      GameTooltip:AddLine("Per character — transferable to another character.", 0.55, 0.75, 1)
+    end
+  end
+  if rec.id then
+    GameTooltip:AddDoubleLine("Currency id", tostring(rec.id), 0.45, 0.45, 0.45, 0.5, 0.5, 0.5)
   end
   GameTooltip:AddLine("As of " .. UI.Ago(rec.capturedAt), 0.5, 0.5, 0.5)
   addCurrencyRoster(field, rec, r, g, b)
