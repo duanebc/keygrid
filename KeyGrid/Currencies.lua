@@ -55,13 +55,23 @@ local DEFS = {
     match = function(n) return n:find("manaflux", 1, true) or n:find("venomblight", 1, true) end,
     item  = "manaflux",
   },
-  -- Spark of Tides, not the dust it is made from. The dust is an ingredient you
-  -- accumulate and spend; the spark is the thing you actually have or have not
-  -- got when a craft is waiting on one, which is the number worth a column.
+  -- Spark of Tides, not the dust that comes with it. The spark is the thing you
+  -- actually have or have not got when a craft is waiting on one, which is the
+  -- number worth a column.
   SPARK = {
     label = "Spark of Tides",
     match = function(n) return n:find("spark", 1, true) and n:find("tides", 1, true) end,
     item  = "spark of tides",
+  },
+  -- Never a column: the dust is the ledger the game keeps FOR the spark. One
+  -- lands with every spark the season hands you and none is ever spent, so its
+  -- earned total is "sparks received this season" and its cap -- which climbs by
+  -- one every week -- is "sparks the season has offered so far". The spark
+  -- itself is a bag item with no history at all, so this is the only place
+  -- either number exists. See C.SparkProgress.
+  SPARKDUST = {
+    label = "Tidal Spark Dust",
+    match = function(n) return n:find("spark", 1, true) and n:find("dust", 1, true) end,
   },
 }
 C.DEFS = DEFS
@@ -84,7 +94,17 @@ C.COLUMNS = {
   -- Earning all five and holding one reads as 5/5 when the answer to "can I craft
   -- this" is 1. The cap has not gone away -- it moves to the small line and the
   -- tooltip, where it is context rather than the headline.
-  { key = "SPARK",     id = "spark",     label = "Spark", w = 56, color = { 0.45, 0.85, 1.00 } },
+  { key = "SPARK",     id = "spark",     label = "Spark", w = 56, color = { 0.45, 0.85, 1.00 },
+    -- The spark is a bag item and carries no history, so its season line comes
+    -- from the dust instead. Only this column has one; everywhere else `season`
+    -- is nil and the cell falls back to the currency's own caps.
+    season = function(c) return C.SparkProgress(c) end },
+}
+
+-- Currencies captured for context but never given a column: something else's
+-- tooltip needs them. Same record shape, stored on the character under `id`.
+C.COMPANIONS = {
+  { key = "SPARKDUST", id = "sparkdust" },
 }
 
 function C.ColumnByID(id)
@@ -354,6 +374,60 @@ function C.ItemSnapshot(key, now, knownID)
 end
 
 --------------------------------------------------------------------------------
+-- Sparks: what the season has actually handed out
+--
+-- Spark of Tides is a bag item, so a count of 1 says nothing about whether the
+-- season gave you one or seven -- it has no earned total and no cap. Tidal Spark
+-- Dust (see DEFS.SPARKDUST) is the ledger the game keeps for it: one dust per
+-- spark received, never spent, against a cap that climbs by one every week of
+-- the season. So dust earned = sparks received, dust cap = sparks the season has
+-- offered, and the gap between them is what is still there to claim.
+--------------------------------------------------------------------------------
+local function seasonKey()
+  return (NS.Store and NS.Store.SeasonID and NS.Store.SeasonID()) or 0
+end
+
+-- The dust cap belongs to the season, not to the character: it is the same
+-- number for everyone and it only ever climbs. So remember the highest any
+-- character has reported, stamped with the season so the next one starts over.
+-- That memory is what keeps the line honest in the seconds after login, when
+-- GetCurrencyInfo still answers 0 for a cap it has not streamed in yet -- and on
+-- an alt whose own snapshot is a week old.
+local function rememberSparkCap(cap)
+  cap = tonumber(cap) or 0
+  if cap <= 0 or type(KeyGridDB) ~= "table" then return end
+  local season = seasonKey()
+  local mem = KeyGridDB.sparkCap
+  if type(mem) ~= "table" or mem.season ~= season then
+    mem = { season = season, cap = 0 }
+    KeyGridDB.sparkCap = mem
+  end
+  if cap > (mem.cap or 0) then mem.cap = cap end
+end
+
+local function sparkSeasonMax(cap)
+  cap = tonumber(cap) or 0
+  local mem = (type(KeyGridDB) == "table") and KeyGridDB.sparkCap
+  if type(mem) == "table" and mem.season == seasonKey() and (mem.cap or 0) > cap then
+    return mem.cap
+  end
+  return cap
+end
+
+-- -> sparks received this season, sparks the season has offered. nil when this
+-- character has never been captured with the dust in reach; a max of 0 means the
+-- cap is not known yet, so the caller should show the received count alone.
+function C.SparkProgress(c)
+  local dust = c and c.sparkdust
+  if not dust then return nil end
+  rememberSparkCap(dust.cap)
+  -- Dust is never spent, so earned and on-hand agree; take the larger anyway,
+  -- for a client that stops maintaining totalEarned.
+  local got = math.max(dust.collected or 0, dust.have or 0)
+  return got, sparkSeasonMax(dust.cap)
+end
+
+--------------------------------------------------------------------------------
 -- Warband balances: what OTHER characters hold
 --
 -- Blizzard's REST API has no currency endpoint, so keygrid-sync can't fill this
@@ -545,7 +619,7 @@ end
 --------------------------------------------------------------------------------
 -- Diagnostics
 --------------------------------------------------------------------------------
-local DUMP_ORDER = { "VOIDCORES", "COINS", "MARL", "MANAFLUX", "SPARK" }
+local DUMP_ORDER = { "VOIDCORES", "COINS", "MARL", "MANAFLUX", "SPARK", "SPARKDUST" }
 
 local function printResolved()
   NS.Print("Resolved (account-wide cache):")

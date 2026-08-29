@@ -212,7 +212,17 @@ local function renderCell(row, cell, col, c)
     -- goes there rather than being lost by not headlining it.
     if n and def.style ~= "capped" then
       local sub
-      if n > 0 and weeklyCap > 0 then
+      -- A column whose currency keeps no history of its own can borrow one (the
+      -- Spark column reads the season off the dust). That is the most useful
+      -- second line there is -- received / offered so far this season -- so it
+      -- wins over the currency's own caps where it exists.
+      local got, offered = nil, nil
+      if def.season then got, offered = def.season(c) end
+      if got and offered and offered > 0 then
+        sub = ("%d/%d"):format(got, offered)
+      elseif got then
+        sub = ("+%s"):format(UI.ShortNum(got))
+      elseif n > 0 and weeklyCap > 0 then
         sub = ("%d/%d"):format(rec.weekly or 0, weeklyCap)
       elseif cap > 0 then
         sub = ("%d/%d"):format(UI.CapProgress(rec), cap)

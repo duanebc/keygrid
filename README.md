@@ -19,7 +19,8 @@ and shows all of them together, account-wide.
 | Best runs | per-dungeon best level, colour-coded |
 | Crest | the highest crest tier earned; hover for every tier's count and season cap |
 | Coins | Corrosive Coins; every transferable currency shows each character's balance and the account total on hover |
-| Currencies | Corrosive Coins, Voidlight Marl, Venomblight Manaflux, Tidal Spark Dust — with weekly earned/cap, or on-hand/season-cap where the season caps it |
+| Currencies | Corrosive Coins, Voidlight Marl, Venomblight Manaflux — with weekly earned/cap, or on-hand/season-cap where the season caps it |
+| Spark | Sparks of Tides on hand, over how many of the season's sparks you have actually received (the game counts them as Tidal Spark Dust) |
 
 Sortable by any column. Characters with no score are hidden by default (`/kg all`
 shows them). The season shown in the title bar is read from the game.

@@ -193,8 +193,8 @@ function Data.CaptureVault(c, now)
   end
 end
 
--- Gearing currencies: one snapshot per NS.Currencies.COLUMNS entry, plus Void
--- Cores and the season's crest set. Each is collected/on-hand/spent/season-cap.
+-- Gearing currencies: one snapshot per NS.Currencies.COLUMNS entry, plus the
+-- companion currencies and the season's crest set. Each is collected/on-hand/spent/season-cap.
 -- In-game only, cached per character in the account-wide DB (like keystones), so
 -- alts keep showing their last count. A currency that can't be resolved leaves
 -- the cached snapshot untouched rather than blanking it — the same early-login
@@ -228,6 +228,12 @@ function Data.CaptureCurrencies(c, now)
       snap = Cur.ItemSnapshot(col.key, now, knownID)
     end
     c[col.id] = snap or c[col.id]
+  end
+
+  -- Currencies with no column of their own: the Spark column's season line is
+  -- read off the dust, which has to be captured for it to be there on an alt.
+  for _, e in ipairs(Cur.COMPANIONS) do
+    c[e.id] = Cur.Snapshot(Cur.Resolve(e.key), now) or c[e.id]
   end
 
   -- Every crest tier this season, for the Crest column's tooltip. c.crest keeps

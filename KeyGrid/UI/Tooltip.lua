@@ -275,6 +275,25 @@ local function addCurrencyRoster(field, rec, r, g, b)
   end
 end
 
+-- Received this season, against the most the season has offered so far. Only a
+-- column with a borrowed history has these (see NS.Currencies.COLUMNS.season);
+-- an `offered` of 0 means the cap has not been read yet, so the count stands
+-- alone rather than being measured against a zero.
+local function addSeasonReceived(got, offered)
+  if not got then return end
+  if not (offered and offered > 0) then
+    GameTooltip:AddDoubleLine("Received this season", tostring(got), 0.7, 0.7, 0.7, 1, 1, 1)
+    return
+  end
+  GameTooltip:AddDoubleLine("Received this season", ("%d / %d"):format(got, offered),
+    0.7, 0.7, 0.7, 1, 1, 1)
+  -- The cap climbs by one a week and nothing expires, so a week you skipped is
+  -- still there to be claimed rather than gone.
+  local left = math.max(0, offered - got)
+  GameTooltip:AddDoubleLine("Still to claim", tostring(left), 0.7, 0.7, 0.7,
+    left > 0 and 1 or 0.3, left > 0 and 0.75 or 1, left > 0 and 0.1 or 0.3)
+end
+
 --------------------------------------------------------------------------------
 -- Gearing-currency tooltip, shared by every NS.Currencies.COLUMNS entry. `field`
 -- is the character-record key (the column id); snapshots come from
@@ -285,6 +304,12 @@ function UI.ShowCurrencyTooltip(anchor, c, field, title, tint)
   local rec = c[field]
   local r, g, b = 1, 1, 1
   if tint then r, g, b = tint[1], tint[2], tint[3] end
+  -- A column whose currency keeps no history of its own borrows one: the Spark
+  -- column's season comes from the dust the game hands out beside it. nil for
+  -- every other column.
+  local col = NS.Currencies.ColumnByID(field)
+  local got, offered
+  if col and col.season then got, offered = col.season(c) end
 
   GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
   GameTooltip:AddLine((rec and rec.name) or title, 1, 1, 1)
@@ -295,6 +320,13 @@ function UI.ShowCurrencyTooltip(anchor, c, field, title, tint)
     GameTooltip:AddLine("Unknown — log in on this character.", 1, 0.75, 0.1)
     GameTooltip:AddLine("If it stays blank on a character you've played,", 0.6, 0.6, 0.6)
     GameTooltip:AddLine("run /kg curdump — the name match may need an id.", 0.6, 0.6, 0.6)
+    -- What the season gave this character is known even when the count isn't:
+    -- the spark is a bag item KeyGrid may never have seen, while the dust that
+    -- records it is a currency that answers on every character.
+    if got then
+      GameTooltip:AddLine(" ")
+      addSeasonReceived(got, offered)
+    end
     -- Still worth showing who does hold some, even from a row that has none.
     addCurrencyRoster(field, nil, r, g, b)
     GameTooltip:Show()
@@ -307,8 +339,16 @@ function UI.ShowCurrencyTooltip(anchor, c, field, title, tint)
   -- below them, because it is context for the reader who goes looking rather
   -- than the answer they opened the tooltip for.
   GameTooltip:AddDoubleLine("On hand", tostring(rec.have or 0), 0.7, 0.7, 0.7, r, g, b)
+  -- For a spark this is the line the count on its own cannot give: two in the bag
+  -- is a season kept up with if the season has handed out two, and four missed
+  -- weeks if it has handed out six.
+  addSeasonReceived(got, offered)
   if rec.source == "item" then
     GameTooltip:AddLine("Tracked as a bag reagent (bags + banks).", 0.55, 0.75, 1)
+    if got then
+      GameTooltip:AddLine("Season count from Tidal Spark Dust, which the game", 0.6, 0.6, 0.6)
+      GameTooltip:AddLine("hands you one of with every Spark of Tides.", 0.6, 0.6, 0.6)
+    end
   else
     -- totalEarned isn't maintained for every currency; when it reads lower than
     -- what's on hand the game simply isn't counting, and "Collected 0" beside
