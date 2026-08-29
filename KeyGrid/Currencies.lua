@@ -79,8 +79,12 @@ C.COLUMNS = {
   { key = "MARL",      id = "marl",      label = "Marl",  w = 52, color = { 0.72, 0.58, 0.95 },
     roster = true },
   { key = "MANAFLUX",  id = "manaflux",  label = "Flux",  w = 52, color = { 0.45, 0.95, 0.65 } },
-  { key = "SPARK",     id = "spark",     label = "Spark", w = 56, color = { 0.45, 0.85, 1.00 },
-    style = "capped" },
+  -- Not "capped" style: that headlines progress towards the season cap, which is
+  -- right for a crest you only ever accumulate and wrong for a spark you spend.
+  -- Earning all five and holding one reads as 5/5 when the answer to "can I craft
+  -- this" is 1. The cap has not gone away -- it moves to the small line and the
+  -- tooltip, where it is context rather than the headline.
+  { key = "SPARK",     id = "spark",     label = "Spark", w = 56, color = { 0.45, 0.85, 1.00 } },
 }
 
 function C.ColumnByID(id)

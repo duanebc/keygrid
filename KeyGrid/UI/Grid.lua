@@ -207,11 +207,22 @@ local function renderCell(row, cell, col, c)
     else
       setBig(cell, n and UI.ShortNum(n) or "--", n and def.color or GREY)
     end
-    if n and n > 0 and weeklyCap > 0 and def.style ~= "capped" then
-      cell.big:ClearAllPoints()
-      cell.big:SetPoint("TOP", cell, "TOP", 0, -1)   -- make room for the weekly line
-      cell.small:SetText(("%d/%d"):format(rec.weekly or 0, weeklyCap))
-      cell.small:SetTextColor(0.6, 0.6, 0.68)
+    -- The second line is whichever limit the currency actually has. A weekly one
+    -- is the more urgent, so it wins where both exist; otherwise a season cap
+    -- goes there rather than being lost by not headlining it.
+    if n and def.style ~= "capped" then
+      local sub
+      if n > 0 and weeklyCap > 0 then
+        sub = ("%d/%d"):format(rec.weekly or 0, weeklyCap)
+      elseif cap > 0 then
+        sub = ("%d/%d"):format(UI.CapProgress(rec), cap)
+      end
+      if sub then
+        cell.big:ClearAllPoints()
+        cell.big:SetPoint("TOP", cell, "TOP", 0, -1)   -- make room for the second line
+        cell.small:SetText(sub)
+        cell.small:SetTextColor(0.6, 0.6, 0.68)
+      end
     end
     cell:SetScript("OnEnter", function(self)
       NS.UI.ShowCurrencyTooltip(self, c, col.id, NS.Currencies.Label(def.key), def.color)
