@@ -99,6 +99,7 @@ C.COLUMNS = {
     -- from the dust instead. Only this column has one; everywhere else `season`
     -- is nil and the cell falls back to the currency's own caps.
     season = function(c) return C.SparkProgress(c) end },
+  { key = "VOIDCORES", id = "cores",     label = "Cores", w = 54, color = { 0.90, 0.55, 0.95 } },
 }
 
 -- Currencies captured for context but never given a column: something else's

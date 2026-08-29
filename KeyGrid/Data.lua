@@ -215,8 +215,6 @@ function Data.CaptureCurrencies(c, now)
   -- by the time a currency cell is hovered.
   Cur.RequestAccountData()
 
-  c.cores = Cur.Snapshot(Cur.Resolve("VOIDCORES"), now) or c.cores
-
   for _, col in ipairs(Cur.COLUMNS) do
     -- A currency if the game lists it as one, else (where the def names a bag
     -- item) a reagent. Once we've seen the item we remember its id, so a later
