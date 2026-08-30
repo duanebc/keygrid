@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.3.0 — 2026-08-30
+
+- **Dungeon cells show your best _timed_ run.** They used to show whichever run
+  was the higher key, timed or not — so an over-time +14 hid a timed +10, and the
+  number on screen was the one worth no score. The timed run is the one a key is
+  chosen against, so it is the one the grid shows, and the column sorts on it.
+- **Over-time runs moved to the tooltip**, in full beside the timed one: level,
+  score, duration, date and source for each. A dungeon you have cleared but never
+  timed still shows that run in the cell, marked `*` — never timed and never run
+  are different answers.
+- The tooltip's closing hint is specific now: where you have an untimed key above
+  your timed best, it names that level as the one to go back for.
+- Both runs are kept per dungeon in saved data, and each merges on its own, so
+  neither source can overwrite one with the other. Existing records are migrated
+  in place; the missing half fills in on the next login or sync.
+- `keygrid-sync` records both runs per dungeon too. Re-run it to fill in over-time
+  runs for alts you have not logged into — until then those cells show only what
+  the API's single best run gave.
+
 ## v1.2.0 — 2026-08-29
 
 - **The Spark column counts Sparks of Tides**, not the Tidal Spark Dust they
