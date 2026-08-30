@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.2.0 — 2026-08-29
+
+- **The Spark column counts Sparks of Tides**, not the Tidal Spark Dust they
+  arrive with. The spark is what a craft is waiting on; the dust is only the
+  game's tally of them.
+- **How much of the season's sparks you have actually claimed.** The cell reads
+  what you hold with `4/5` under it — received this season over what the season
+  has offered so far — and the tooltip spells it out with how many are **still
+  to claim**. The weekly allowance rises by one every week, so a week you missed
+  is catch-up rather than gone. A spark is a bag item and keeps no history of its
+  own, so this is read off the dust, which does.
+- **The Spark cell headlines what you hold.** It read `5/5` with one spark in the
+  bag: season progress, where the question is whether you can craft. The cap
+  moved to the second line.
+- **A Void Cores column**, next to Spark. The count was already captured for the
+  (still greyed-out) Void Cores tab and had nowhere to be seen.
+- **Currency tooltips lead with the numbers.** On hand, the season, and what has
+  been spent now run together at the top; the currency id and transfer rules moved
+  down beside the timestamp, where they read as provenance. A capped or seasonal
+  currency says **Gained this season** rather than the ambiguous "Collected".
+
 ## v1.1.0 — 2026-08-22
 
 - **Minimap button.** Left click opens the grid, right click opens the new
