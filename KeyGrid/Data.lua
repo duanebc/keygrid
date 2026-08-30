@@ -87,16 +87,9 @@ local function normRun(info, timed)
   }
 end
 
--- Prefer the higher key level; on equal level prefer the timed record.
-function Data.PickBestRun(intime, overtime)
-  local a = normRun(intime, true)
-  local b = normRun(overtime, false)
-  if a and b then
-    if (a.level or 0) >= (b.level or 0) then return a else return b end
-  end
-  return a or b
-end
-
+-- Both of the game's season bests, stored side by side. Picking one used to lose
+-- the other: an over-time +14 outranked a timed +10 and the grid showed the +14,
+-- which is the run that is worth nothing. See Store.MergeBest.
 function Data.CaptureBest(c, now)
   if not (C_ChallengeMode and C_ChallengeMode.GetMapTable) then return end
   local maps = C_ChallengeMode.GetMapTable()
@@ -105,10 +98,9 @@ function Data.CaptureBest(c, now)
   for _, mapID in ipairs(maps) do
     if C_MythicPlus and C_MythicPlus.GetSeasonBestForMap then
       local intime, overtime = C_MythicPlus.GetSeasonBestForMap(mapID)
-      local best = Data.PickBestRun(intime, overtime)
-      if best and best.level then
-        NS.Store.MergeBest(c, mapID, best, "ingame")
-      end
+      local timed, over = normRun(intime, true), normRun(overtime, false)
+      if timed and timed.level then NS.Store.MergeBest(c, mapID, timed, "ingame") end
+      if over and over.level then NS.Store.MergeBest(c, mapID, over, "ingame") end
     end
   end
 end

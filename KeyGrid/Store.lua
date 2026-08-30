@@ -6,7 +6,7 @@ local ADDON, NS = ...
 local Store = {}
 NS.Store = Store
 
-local SCHEMA_VERSION = 2
+local SCHEMA_VERSION = 3
 local WEEK = 7 * 24 * 3600
 
 local DEFAULTS = {
@@ -62,6 +62,24 @@ function Store.Init()
       or "grid"
   end
   KeyGridDB.ui.tab = nil
+  -- v2 kept one run per dungeon -- whichever was the higher level, timed or not
+  -- -- so a blown timer could hide a beaten one. Move each stored run into the
+  -- slot it belongs in; the one that is missing fills itself in on the next
+  -- capture or sync.
+  if not fresh and prev < 3 then
+    for _, c in pairs(KeyGridDB.chars) do
+      for mapID, b in pairs(c.best or {}) do
+        if type(b) == "table" and b.level and not (b.intime or b.overtime) then
+          c.best[mapID] = {
+            [b.timed and "intime" or "overtime"] = {
+              level = b.level, score = b.score, durationSec = b.durationSec or 0,
+              completedAt = b.completedAt or 0, source = b.source,
+            },
+          }
+        end
+      end
+    end
+  end
   KeyGridDB.version = SCHEMA_VERSION
   -- Records written before scores were season-stamped have no high-water mark;
   -- seed it from the cached score so the roster filter behaves unchanged. The
@@ -185,27 +203,69 @@ function Store.SeasonScore(c)
   return c.score or 0
 end
 
+--------------------------------------------------------------------------------
+-- Best runs. A dungeon holds two records, the way the game's own
+-- GetSeasonBestForMap answers: the best run you beat the timer on, and the best
+-- one you did not. They are kept apart because they answer different questions
+-- -- an over-time +14 says the group can clear the dungeon, a timed +10 is the
+-- number that is actually worth score -- and one record could only ever hold the
+-- higher of the two, which made a beaten timer invisible behind a blown one.
+--
+--   c.best[mapID] = { intime = <run>, overtime = <run> }
+--   <run>         = { level, score, durationSec, completedAt, source }
+--
+-- Either slot may be missing. Store.ShownRun picks the one a cell displays.
+--------------------------------------------------------------------------------
+local function slotFor(run) return run.timed and "intime" or "overtime" end
+
 function Store.MergeBest(c, mapID, run, source)
   mapID = tonumber(mapID)
   if not mapID or type(run) ~= "table" then return end
+  local rec = c.best[mapID]
+  if not rec then
+    rec = {}
+    c.best[mapID] = rec
+  end
+  local slot = slotFor(run)
   local newAt = run.completedAt or 0
-  local existing = c.best[mapID]
+  local existing = rec[slot]
   if not existing then
-    c.best[mapID] = {
-      level = run.level, score = run.score, timed = run.timed,
+    rec[slot] = {
+      level = run.level, score = run.score,
       durationSec = run.durationSec or 0, completedAt = newAt, source = source,
     }
     return
   end
+  -- Both sources report a season best, so a later completion is a better run.
+  -- The api tiebreak stands for a run KeyGrid saw in game and the API then
+  -- confirmed: same run, better provenance.
   local oldAt = existing.completedAt or 0
   if newAt > oldAt or (newAt == oldAt and source == "api") then
     existing.level       = run.level
     existing.score       = run.score
-    existing.timed       = run.timed
     existing.durationSec = run.durationSec or 0
     existing.completedAt = newAt
     existing.source      = source
   end
+end
+
+-- The two records, timed first. Either may be nil.
+function Store.Runs(c, mapID)
+  local rec = c.best and c.best[mapID]
+  if not rec then return nil, nil end
+  return rec.intime, rec.overtime
+end
+
+-- What a dungeon cell shows: the best timed run, since that is the one that
+-- carries score and the one a key is chosen against. A dungeon with nothing but
+-- an over-time run still shows it -- "never timed" and "never run" are different
+-- answers, and the cell marks which it is. Second return: true when the run
+-- being shown is an over-time one.
+function Store.ShownRun(c, mapID)
+  local intime, overtime = Store.Runs(c, mapID)
+  if intime then return intime, false end
+  if overtime then return overtime, true end
+  return nil, false
 end
 
 -- Fold the sync-generated global into KeyGridDB. Never touches keystone/vault.
@@ -230,8 +290,26 @@ function Store.MergeSyncData()
     if sc.class and not c.class then c.class = sc.class end
     Store.MergeScore(c, sc.score, sync.generatedAt, "api", sync.seasonId)
     if type(sc.best) == "table" then
-      for mapID, run in pairs(sc.best) do
-        Store.MergeBest(c, mapID, run, "api")
+      for mapID, entry in pairs(sc.best) do
+        -- Sync data written before the split holds a single run per dungeon;
+        -- MergeBest files it by its own `timed` flag either way, so old
+        -- KeyGrid_SyncData still merges correctly (just half the picture, until
+        -- keygrid-sync is run again).
+        if entry.intime or entry.overtime then
+          -- The slot it arrived in is what decides, not a flag inside it: set
+          -- the flag to match so MergeBest files it there whatever the
+          -- generator wrote.
+          if entry.intime then
+            entry.intime.timed = true
+            Store.MergeBest(c, mapID, entry.intime, "api")
+          end
+          if entry.overtime then
+            entry.overtime.timed = false
+            Store.MergeBest(c, mapID, entry.overtime, "api")
+          end
+        else
+          Store.MergeBest(c, mapID, entry, "api")
+        end
       end
     end
     -- keystone & vault are in-game-only: intentionally not populated here.
@@ -255,8 +333,9 @@ end
 
 function Store.SortState() return KeyGridDB.ui.sortKey, KeyGridDB.ui.sortDir end
 
+-- Sort a dungeon column on what its cells show, so the order matches the eye.
 local function levelScore(c, mapID)
-  local b = c.best and c.best[mapID]
+  local b = Store.ShownRun(c, mapID)
   if not b then return 0, 0 end
   return b.level or 0, b.score or 0
 end

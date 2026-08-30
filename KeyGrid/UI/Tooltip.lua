@@ -23,14 +23,29 @@ local function sourceLabel(src) return src == "api" and "API" or "in-game" end
 --------------------------------------------------------------------------------
 -- Dungeon cell tooltip
 --------------------------------------------------------------------------------
+-- One run, four lines: the headline with its score, then how it went and where
+-- the record came from. `tint` colors the headline so timed and over time are
+-- told apart at a glance as well as by the label.
+local function addRunBlock(label, run, tint)
+  local r, g, b = tint[1], tint[2], tint[3]
+  GameTooltip:AddDoubleLine(label .. " +" .. (run.level or 0),
+    tostring(run.score or 0) .. " pts", r, g, b, 1, 1, 1)
+  GameTooltip:AddDoubleLine("   Duration", fmtDuration(run.durationSec), 0.7, 0.7, 0.7, 1, 1, 1)
+  GameTooltip:AddDoubleLine("   Completed", fmtDate(run.completedAt), 0.7, 0.7, 0.7, 1, 1, 1)
+  GameTooltip:AddDoubleLine("   Source", sourceLabel(run.source), 0.55, 0.55, 0.55, 0.55, 0.55, 0.55)
+end
+
 function UI.ShowCellTooltip(anchor, c, mapID)
   local name = NS.Dungeons.NameFor(mapID) or ("Dungeon " .. tostring(mapID))
   GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
   GameTooltip:AddLine(name, 1, 1, 1)
   GameTooltip:AddLine(c.name or c._key or "", 0.7, 0.7, 0.7)
 
-  local b = c.best and c.best[mapID]
-  if not b or not b.level then
+  -- The cell only has room for one number, so it shows the timed run. Both are
+  -- here: the over-time run is where the group's real ceiling shows, and a key
+  -- you have cleared but not timed is exactly the one worth another go.
+  local timed, over = NS.Store.Runs(c, mapID)
+  if not timed and not over then
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine("Never run this season.", 0.6, 0.6, 0.6)
     GameTooltip:Show()
@@ -38,16 +53,25 @@ function UI.ShowCellTooltip(anchor, c, mapID)
   end
 
   GameTooltip:AddLine(" ")
-  local state = b.timed and "|cff19ff19Timed|r" or "|cffff7733Over time *|r"
-  GameTooltip:AddDoubleLine("Best: +" .. b.level .. "  " .. state, tostring(b.score or 0) .. " pts", 1, 1, 1, 1, 1, 1)
-  GameTooltip:AddDoubleLine("Duration", fmtDuration(b.durationSec), 0.7, 0.7, 0.7, 1, 1, 1)
-  GameTooltip:AddDoubleLine("Completed", fmtDate(b.completedAt), 0.7, 0.7, 0.7, 1, 1, 1)
-  GameTooltip:AddDoubleLine("Source", sourceLabel(b.source), 0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
-
-  -- Score delta from timing one key level higher (rough hint)
-  if b.timed and NS.UI.ScoreColor then
+  if timed then
+    addRunBlock("|cff19ff19Timed|r", timed, { 0.1, 1.0, 0.1 })
+  else
+    GameTooltip:AddDoubleLine("|cff19ff19Timed|r", "never this season", 0.1, 1.0, 0.1, 0.6, 0.6, 0.6)
+  end
+  if over then
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("Timing +" .. (b.level + 1) .. " would raise this dungeon's score.", 0.5, 0.8, 1)
+    addRunBlock("|cffff7733Over time *|r", over, { 1.0, 0.45, 0.20 })
+  end
+
+  -- What to do about it. A cleared-but-blown key above the timed best is the
+  -- specific, useful version of "run a higher key".
+  GameTooltip:AddLine(" ")
+  if over and (not timed or (over.level or 0) > (timed.level or 0)) then
+    GameTooltip:AddLine("Timing that +" .. (over.level or 0) .. " would raise this dungeon's score.",
+      0.5, 0.8, 1)
+  elseif timed then
+    GameTooltip:AddLine("Timing +" .. ((timed.level or 0) + 1) .. " would raise this dungeon's score.",
+      0.5, 0.8, 1)
   end
   GameTooltip:Show()
 end

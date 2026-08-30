@@ -245,12 +245,16 @@ local function renderCell(row, cell, col, c)
     end)
 
   elseif col.isDungeon then
-    local b = c.best and c.best[col.mapID]
+    -- The timed run is the headline: it is the one that carries score, and the
+    -- one a key is chosen against. An over-time run only reaches the cell when
+    -- there is no timed run at all -- "never timed here" and "never been here"
+    -- are different answers -- and the tooltip has both in full either way.
+    local b, showingOver = NS.Store.ShownRun(c, col.mapID)
     if not b or not b.level then
       setBig(cell, "--", GREY)
     else
-      local lvlColor = b.timed and GREEN or UNTIME
-      local glyph = b.timed and "" or " |cffff7733*|r"  -- '*' = over time (font-safe)
+      local lvlColor = showingOver and UNTIME or GREEN
+      local glyph = showingOver and " |cffff7733*|r" or ""  -- '*' = over time (font-safe)
       cell.big:ClearAllPoints()
       cell.big:SetPoint("TOP", cell, "TOP", 0, -1)
       cell.big:SetJustifyH("CENTER")

@@ -16,7 +16,7 @@ and shows all of them together, account-wide.
 | Score | current season Mythic+ rating |
 | iLvl | equipped item level |
 | Vault | Great Vault progress (runs toward each slot) |
-| Best runs | per-dungeon best level, colour-coded |
+| Best runs | per-dungeon best **timed** level, colour-coded; hover for the over-time run beside it. A dungeon you have cleared but never timed shows that run, marked `*` |
 | Crest | the highest crest tier earned; hover for every tier's count and season cap |
 | Coins | Corrosive Coins; every transferable currency shows each character's balance and the account total on hover |
 | Currencies | Corrosive Coins, Voidlight Marl, Venomblight Manaflux, Void Cores — with weekly earned/cap, or on-hand/season-cap where the season caps it |

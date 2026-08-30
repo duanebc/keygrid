@@ -371,9 +371,15 @@ def get_character_mplus(
             "durationSec": int((run.get("duration", 0) or 0) / 1000),
             "completedAt": int((run.get("completed_timestamp", 0) or 0) / 1000),
         }
-        # keep the higher-level record per dungeon
-        if did not in best or entry["level"] > best[did]["level"]:
-            best[did] = entry
+        # Two records per dungeon, kept apart: the best run the timer was beaten
+        # on and the best one it was not. A single slot could only ever hold the
+        # higher of the two, which hid a timed +10 behind an over-time +14 that
+        # is worth no score. KeyGrid shows the timed one and puts the other in
+        # the tooltip, so it needs both.
+        slot = "intime" if entry["timed"] else "overtime"
+        slots = best.setdefault(did, {})
+        if slot not in slots or entry["level"] > slots[slot]["level"]:
+            slots[slot] = entry
 
     return {"score": round(rating), "best": best}
 
@@ -404,12 +410,18 @@ def render_lua(chars: dict[str, dict], region: str, season_id: int, generated_at
             lines.append(f'      realm = "{lua_escape(c["realm"])}",')
         lines.append("      best = {")
         for did in sorted(c["best"]):
-            b = c["best"][did]
-            lines.append(
-                f"        [{did}] = {{ level={b['level']}, score={b['score']}, "
-                f"timed={str(b['timed']).lower()}, durationSec={b['durationSec']}, "
-                f"completedAt={b['completedAt']} }},"
-            )
+            slots = c["best"][did]
+            parts = []
+            for slot in ("intime", "overtime"):
+                b = slots.get(slot)
+                if b is None:
+                    continue
+                parts.append(
+                    f"{slot}={{ level={b['level']}, score={b['score']}, "
+                    f"timed={str(b['timed']).lower()}, durationSec={b['durationSec']}, "
+                    f"completedAt={b['completedAt']} }}"
+                )
+            lines.append(f"        [{did}] = {{ {', '.join(parts)} }},")
         lines.append("      },")
         lines.append("    },")
     lines.append("  },")
