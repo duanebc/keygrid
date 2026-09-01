@@ -319,6 +319,13 @@ local function runsNeededFor(levels, level)
 end
 
 -- Everything the vault tooltip needs, as data. No side effects, no drawing.
+--
+-- Built from two fields only: each slot's level, and the run list. The per-slot
+-- progress counter is deliberately not used. It does not behave like a run
+-- count -- across the live roster one character reads 4, 4 and 15 runs on its
+-- three slots at the same instant, and another reads ten runs against a
+-- threshold of eight while awarding nothing -- and a number nobody can explain
+-- has no business being the basis of an answer.
 function Data.VaultPlan(c)
   local v = c and c.vault
   if not v or not v.capturedAt then return nil end
@@ -328,12 +335,14 @@ function Data.VaultPlan(c)
   for i = 1, #v do
     if type(v[i]) == "table" then
       local s = v[i]
+      local level = s.level or 0
       slots[#slots + 1] = {
         threshold = s.threshold or 0,
-        progress = s.progress or 0,
-        level = s.level or 0,
-        earned = (s.progress or 0) >= (s.threshold or math.huge),
-        itemLevel = Data.VaultRewardLevel(s.level),
+        level = level,
+        -- A slot with no level attached is one you have not earned. This field
+        -- agrees with itself across every character stored; the counter does not.
+        unlocked = level > 0,
+        itemLevel = level > 0 and Data.VaultRewardLevel(level) or nil,
       }
     end
   end
@@ -341,68 +350,24 @@ function Data.VaultPlan(c)
 
   local plan = { slots = slots }
 
-  -- The best reward already locked in. Slot one rests on your single highest
-  -- run, so wherever anything is earned at all it is the best of them.
-  for _, s in ipairs(slots) do
-    if s.earned and s.itemLevel then
-      if not plan.current or s.itemLevel > plan.current.itemLevel then
-        plan.current = { itemLevel = s.itemLevel, level = s.level }
-      end
-    end
-  end
-
   local runs = c.weeklyRuns
   local fresh = (runs and runs.levels and not NS.Store.IsStale(runs.capturedAt))
     and true or false
   plan.haveRuns = fresh
+  if fresh then plan.runsThisWeek = #runs.levels end
 
+  -- The ceiling, and what stands between you and having every slot pay it.
+  --
+  -- Eight runs at or above a level puts all three thresholds at or above it,
+  -- whatever the per-slot rule turns out to be. That makes this the one figure
+  -- here that does not depend on knowing Blizzard's exact arithmetic.
   local cap, capItem = Data.VaultCapLevel()
   if cap and capItem then
     plan.cap = { level = cap, itemLevel = capItem }
     if fresh then plan.cap.runsNeeded = runsNeededFor(runs.levels, cap) end
-  end
-
-  if fresh then
-    local eighth = runs.levels[VAULT_TOP_RUNS]
-
-    if eighth then
-      -- Eight runs already. The vault is worth what the lowest of them is worth,
-      -- so the next step is the smallest level that beats it. Levels paying the
-      -- same reward are skipped -- "improve to 318" offered twice, once for +9
-      -- and once for +10, is noise rather than a choice.
-      local floorItem = Data.VaultRewardLevel(eighth)
-      for level = eighth + 1, cap or MAX_PROBE do
-        local item = Data.VaultRewardLevel(level)
-        if item and (not floorItem or item > floorItem) then
-          plan.next = {
-            level = level, itemLevel = item,
-            runsNeeded = runsNeededFor(runs.levels, level),
-          }
-          break
-        end
-      end
-    else
-      -- Fewer than eight. What is short is the count, not the level, so the
-      -- useful answer is what carrying on at the level you are already running
-      -- would be worth. Measuring against the absolute floor instead produced
-      -- "improve to 298, 3 more runs at +2" for somebody with five +10s: true,
-      -- and no use to anyone.
-      local lowest
-      for _, l in ipairs(runs.levels) do
-        if not lowest or l < lowest then lowest = l end
-      end
-      local item = lowest and Data.VaultRewardLevel(lowest) or nil
-      if item then
-        plan.next = {
-          level = lowest, itemLevel = item,
-          runsNeeded = runsNeededFor(runs.levels, lowest),
-        }
-      end
-    end
-
-    -- Nothing worth saying when the next step is already the ceiling.
-    if plan.next and plan.cap and plan.next.itemLevel >= plan.cap.itemLevel then
-      plan.next = nil
+    plan.maxed = true
+    for _, slot in ipairs(slots) do
+      if not slot.itemLevel or slot.itemLevel < capItem then plan.maxed = false end
     end
   end
 

@@ -164,59 +164,53 @@ function UI.ShowVaultTooltip(anchor, c)
     return
   end
 
-  -- What is already yours, before what is not. The one number you would act on
-  -- if you stopped reading here.
   GameTooltip:AddLine(" ")
-  if plan.current then
-    GameTooltip:AddDoubleLine("Current reward",
-      ("%d   Mythic +%d"):format(plan.current.itemLevel, plan.current.level),
-      0.7, 0.7, 0.7, 1, 0.82, 0)
-  else
-    GameTooltip:AddDoubleLine("Current reward", "nothing yet",
-      0.7, 0.7, 0.7, 0.6, 0.6, 0.6)
+
+  -- The question the column exists to answer, first and in runs.
+  --
+  -- Being finished is visible in the slots themselves, so it is said for every
+  -- character, run list or not. Telling somebody whose three slots already read
+  -- 318 to go and log in is exactly the nagging this tooltip is meant to end.
+  local said = false
+  if plan.maxed then
+    GameTooltip:AddDoubleLine("All three at top reward", "done",
+      0.7, 0.7, 0.7, 0.3, 1, 0.3)
+    said = true
+  elseif plan.cap and plan.cap.runsNeeded then
+    local n = plan.cap.runsNeeded
+    GameTooltip:AddDoubleLine("All three at top reward",
+      n <= 0 and "done"
+        or ("%d more +%d%s"):format(n, plan.cap.level, n == 1 and "" or "s"),
+      0.7, 0.7, 0.7, 1, 1, 1)
+    said = true
   end
 
-  -- The gap, in runs. Both the nearest step and the ceiling, because one tells
-  -- you what tonight is for and the other what the week is for.
-  if not plan.haveRuns then
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("Log in on this character to see what is missing.",
-      0.6, 0.6, 0.6)
-  else
-    GameTooltip:AddLine(" ")
-    local function gap(label, step)
-      if not step then return end
-      local right
-      if (step.runsNeeded or 0) <= 0 then
-        right = "done"
-      else
-        right = ("%d more run%s at +%d"):format(
-          step.runsNeeded, step.runsNeeded == 1 and "" or "s", step.level)
-      end
-      GameTooltip:AddDoubleLine(("%s %d"):format(label, step.itemLevel), right,
-        0.7, 0.7, 0.7, 1, 1, 1)
-    end
-    gap("Improve to", plan.next)
-    gap("Max to", plan.cap)
-    GameTooltip:AddLine("Based on the lowest of your top 8 runs.", 0.5, 0.5, 0.5)
+  -- What each slot will actually hand over. Item levels, in threshold order,
+  -- because that is the number you would compare against what you are wearing.
+  local parts = {}
+  for _, slot in ipairs(plan.slots) do
+    parts[#parts + 1] = slot.itemLevel and tostring(slot.itemLevel) or "—"
+  end
+  if #parts > 0 then
+    local r, g, b = 1, 1, 1
+    if plan.maxed then r, g, b = 0.3, 1, 0.3 end
+    GameTooltip:AddDoubleLine("Rewards", table.concat(parts, " / "),
+      0.7, 0.7, 0.7, r, g, b)
   end
 
-  -- The slots themselves last: detail for whoever wants it, out of the way of
-  -- whoever does not.
-  GameTooltip:AddLine(" ")
-  for i = 1, 3 do
-    local s = plan.slots[i]
-    if s then
-      local left = ("  %d / %d runs"):format(s.progress, s.threshold)
-      if s.earned then
-        local right = ("+%d"):format(s.level)
-        if s.itemLevel then right = right .. ("   %d"):format(s.itemLevel) end
-        GameTooltip:AddDoubleLine(left, right, 0.3, 1, 0.3, 1, 1, 1)
-      else
-        GameTooltip:AddDoubleLine(left, "locked",
-          0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
-      end
+  if plan.haveRuns then
+    GameTooltip:AddDoubleLine("Runs this week", tostring(plan.runsThisWeek or 0),
+      0.7, 0.7, 0.7, 1, 1, 1)
+  elseif not said then
+    -- Say what the target is even without the run list. Naming the ceiling costs
+    -- nothing and is true for every character; withholding the whole answer
+    -- until you log in is the opposite of what the roster is for.
+    if plan.cap then
+      GameTooltip:AddLine(("Top reward is %d, at +%d.")
+        :format(plan.cap.itemLevel, plan.cap.level), 0.7, 0.7, 0.7)
     end
+    GameTooltip:AddLine("Run list not captured yet — log in to fill it.",
+      0.5, 0.5, 0.5)
   end
 
   GameTooltip:AddLine("Captured " .. UI.Ago(v.capturedAt), 0.5, 0.5, 0.5)
