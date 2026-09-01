@@ -268,7 +268,8 @@ function Store.ShownRun(c, mapID)
   return nil, false
 end
 
--- Fold the sync-generated global into KeyGridDB. Never touches keystone/vault.
+-- Fold the sync-generated global into KeyGridDB. Never touches keystone, vault
+-- or weeklyRuns: the API cannot see them, so a sync must not blank them.
 function Store.MergeSyncData()
   local sync = _G.KeyGridSyncData
   if type(sync) ~= "table" or type(sync.chars) ~= "table" then return end
@@ -312,7 +313,7 @@ function Store.MergeSyncData()
         end
       end
     end
-    -- keystone & vault are in-game-only: intentionally not populated here.
+    -- keystone, vault & weeklyRuns are in-game-only: not populated here.
     count = count + 1
   end
   NS.Debug("merged %d characters from KeyGridSyncData", count)

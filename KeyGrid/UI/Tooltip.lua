@@ -143,32 +143,83 @@ end
 function UI.ShowVaultTooltip(anchor, c)
   GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
   GameTooltip:AddLine("Great Vault — Mythic+", 1, 1, 1)
+  GameTooltip:AddLine(c.name or c._key or "", 0.7, 0.7, 0.7)
+
   local v = c.vault
   if not v or not v.capturedAt then
     GameTooltip:AddLine("Unknown — log in on this character.", 1, 0.75, 0.1)
-  elseif NS.Store.IsStale(v.capturedAt) then
+    GameTooltip:Show()
+    return
+  end
+  if NS.Store.IsStale(v.capturedAt) then
     GameTooltip:AddLine("Unknown since the weekly reset — log in to update.", 1, 0.75, 0.1)
+    GameTooltip:Show()
+    return
+  end
+
+  local plan = NS.Data.VaultPlan(c)
+  if not plan then
+    GameTooltip:AddLine("Unknown — log in on this character.", 1, 0.75, 0.1)
+    GameTooltip:Show()
+    return
+  end
+
+  -- What is already yours, before what is not. The one number you would act on
+  -- if you stopped reading here.
+  GameTooltip:AddLine(" ")
+  if plan.current then
+    GameTooltip:AddDoubleLine("Current reward",
+      ("%d   Mythic +%d"):format(plan.current.itemLevel, plan.current.level),
+      0.7, 0.7, 0.7, 1, 0.82, 0)
   else
-    GameTooltip:AddLine("Reward each slot grants next reset:", 0.7, 0.7, 0.7)
-    local slots = {}
-    for i = 1, #v do
-      if type(v[i]) == "table" then slots[#slots + 1] = v[i] end
+    GameTooltip:AddDoubleLine("Current reward", "nothing yet",
+      0.7, 0.7, 0.7, 0.6, 0.6, 0.6)
+  end
+
+  -- The gap, in runs. Both the nearest step and the ceiling, because one tells
+  -- you what tonight is for and the other what the week is for.
+  if not plan.haveRuns then
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("Log in on this character to see what is missing.",
+      0.6, 0.6, 0.6)
+  else
+    GameTooltip:AddLine(" ")
+    local function gap(label, step)
+      if not step then return end
+      local right
+      if (step.runsNeeded or 0) <= 0 then
+        right = "done"
+      else
+        right = ("%d more run%s at +%d"):format(
+          step.runsNeeded, step.runsNeeded == 1 and "" or "s", step.level)
+      end
+      GameTooltip:AddDoubleLine(("%s %d"):format(label, step.itemLevel), right,
+        0.7, 0.7, 0.7, 1, 1, 1)
     end
-    table.sort(slots, function(a, b) return (a.threshold or 0) < (b.threshold or 0) end)
-    for i = 1, 3 do
-      local s = slots[i]
-      if s then
-        local earned = (s.progress or 0) >= (s.threshold or math.huge)
-        local left = ("  %d / %d runs"):format(s.progress or 0, s.threshold or 0)
-        if earned then
-          GameTooltip:AddDoubleLine(left, "Mythic +" .. (s.level or 0), 0.3, 1, 0.3, 1, 1, 1)
-        else
-          GameTooltip:AddDoubleLine(left, "not yet unlocked", 0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
-        end
+    gap("Improve to", plan.next)
+    gap("Max to", plan.cap)
+    GameTooltip:AddLine("Based on the lowest of your top 8 runs.", 0.5, 0.5, 0.5)
+  end
+
+  -- The slots themselves last: detail for whoever wants it, out of the way of
+  -- whoever does not.
+  GameTooltip:AddLine(" ")
+  for i = 1, 3 do
+    local s = plan.slots[i]
+    if s then
+      local left = ("  %d / %d runs"):format(s.progress, s.threshold)
+      if s.earned then
+        local right = ("+%d"):format(s.level)
+        if s.itemLevel then right = right .. ("   %d"):format(s.itemLevel) end
+        GameTooltip:AddDoubleLine(left, right, 0.3, 1, 0.3, 1, 1, 1)
+      else
+        GameTooltip:AddDoubleLine(left, "locked",
+          0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
       end
     end
-    GameTooltip:AddLine("Captured " .. UI.Ago(v.capturedAt), 0.5, 0.5, 0.5)
   end
+
+  GameTooltip:AddLine("Captured " .. UI.Ago(v.capturedAt), 0.5, 0.5, 0.5)
   GameTooltip:Show()
 end
 

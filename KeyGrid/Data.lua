@@ -191,6 +191,224 @@ end
 -- alts keep showing their last count. A currency that can't be resolved leaves
 -- the cached snapshot untouched rather than blanking it — the same early-login
 -- race guard the keystone capture uses.
+-- This week's completed runs, high to low.
+--
+-- CaptureBest records season bests per map, which is a different question: the
+-- vault is built from this week, counts repeats of the same dungeon, and cares
+-- only about levels. Without them "how many more keys do I need" has to be
+-- worked out by hand, per character, which is the thing the grid exists to
+-- spare you.
+--
+-- Twenty is kept although the thresholds stop at eight: headroom for showing the
+-- top eight, and for a threshold that moves in a later season.
+local MAX_WEEKLY_RUNS = 20
+
+function Data.CaptureWeeklyRuns(c, now)
+  if not (C_MythicPlus and C_MythicPlus.GetRunHistory) then return false end
+
+  -- The two-argument form asks for this week only, completed only. Clients have
+  -- disagreed about the signature, so a no-argument call is the fallback and the
+  -- week is filtered by hand afterwards.
+  local ok, runs = pcall(C_MythicPlus.GetRunHistory, false, true)
+  if not ok or type(runs) ~= "table" then
+    ok, runs = pcall(C_MythicPlus.GetRunHistory)
+  end
+  if not ok or type(runs) ~= "table" then return false end
+
+  local levels = {}
+  for _, run in ipairs(runs) do
+    if type(run) == "table" then
+      -- thisWeek is absent on the filtered form; absence means yes, since this
+      -- week is what was asked for.
+      local thisWeek = (run.thisWeek == nil) or run.thisWeek
+      local level = tonumber(run.level)
+      if thisWeek and level and level > 0 and run.completed ~= false then
+        levels[#levels + 1] = level
+      end
+    end
+  end
+
+  -- Nothing read is not the same as nothing run. An empty answer in the first
+  -- seconds after login would otherwise wipe a good snapshot, which is the same
+  -- race the keystone capture guards against.
+  if #levels == 0 and c.weeklyRuns and #(c.weeklyRuns.levels or {}) > 0
+    and not NS.Store.IsStale(c.weeklyRuns.capturedAt) then
+    return false
+  end
+
+  table.sort(levels, function(a, b) return a > b end)
+  while #levels > MAX_WEEKLY_RUNS do table.remove(levels) end
+  c.weeklyRuns = { capturedAt = now, levels = levels }
+  return true
+end
+
+--------------------------------------------------------------------------------
+-- Vault arithmetic
+--------------------------------------------------------------------------------
+
+-- The vault reward is the lowest of your top eight runs, so eight is the number
+-- every "how many more" answer is measured against.
+local VAULT_TOP_RUNS = 8
+local MAX_PROBE = 40
+
+local rewardCache = {}
+
+-- The item level the vault grants for a key level.
+--
+-- GetRewardLevelForDifficultyLevel returns two values and only one of them is
+-- reliably an item level; the other came back as 28 on a live client. Where both
+-- look like item levels, the larger is the vault and the smaller is the
+-- end-of-run drop: on a +9 the pair was 318 against a dungeon capping at 311.
+-- The vault is what this column is about, so the larger is the one to take.
+function Data.VaultRewardLevel(keyLevel)
+  keyLevel = tonumber(keyLevel)
+  if not keyLevel or keyLevel < 1 then return nil end
+  local hit = rewardCache[keyLevel]
+  if hit ~= nil then return hit or nil end
+  if not (C_MythicPlus and C_MythicPlus.GetRewardLevelForDifficultyLevel) then
+    return nil
+  end
+
+  local ok, a, b = pcall(C_MythicPlus.GetRewardLevelForDifficultyLevel, keyLevel)
+  if not ok then return nil end
+  a, b = tonumber(a), tonumber(b)
+  if a and a < 100 then a = nil end
+  if b and b < 100 then b = nil end
+
+  local level
+  if a and b then level = math.max(a, b) else level = a or b end
+  rewardCache[keyLevel] = level or false
+  return level
+end
+
+-- The highest key level that still improves the vault, and what it grants.
+--
+-- Probed rather than written down. A hardcoded +10 is right until the season
+-- turns over, which is precisely the moment it becomes wrong and nobody is
+-- watching for it.
+local capLevel, capItemLevel, capProbed
+
+function Data.VaultCapLevel()
+  if capProbed then return capLevel, capItemLevel end
+  capProbed = true
+
+  local bestLevel, bestItem
+  for level = 2, MAX_PROBE do
+    local item = Data.VaultRewardLevel(level)
+    if item and (not bestItem or item > bestItem) then
+      bestLevel, bestItem = level, item
+    end
+  end
+  capLevel, capItemLevel = bestLevel, bestItem
+  return capLevel, capItemLevel
+end
+
+function Data.ForgetVaultCache()
+  rewardCache = {}
+  capLevel, capItemLevel, capProbed = nil, nil, nil
+end
+
+-- How many further runs at this level or above are needed before all eight of
+-- the top runs sit at or above it.
+local function runsNeededFor(levels, level)
+  local have = 0
+  for _, l in ipairs(levels or {}) do
+    if l >= level then have = have + 1 end
+  end
+  return math.max(0, VAULT_TOP_RUNS - have), have
+end
+
+-- Everything the vault tooltip needs, as data. No side effects, no drawing.
+function Data.VaultPlan(c)
+  local v = c and c.vault
+  if not v or not v.capturedAt then return nil end
+  if NS.Store.IsStale(v.capturedAt) then return nil end
+
+  local slots = {}
+  for i = 1, #v do
+    if type(v[i]) == "table" then
+      local s = v[i]
+      slots[#slots + 1] = {
+        threshold = s.threshold or 0,
+        progress = s.progress or 0,
+        level = s.level or 0,
+        earned = (s.progress or 0) >= (s.threshold or math.huge),
+        itemLevel = Data.VaultRewardLevel(s.level),
+      }
+    end
+  end
+  table.sort(slots, function(a, b) return a.threshold < b.threshold end)
+
+  local plan = { slots = slots }
+
+  -- The best reward already locked in. Slot one rests on your single highest
+  -- run, so wherever anything is earned at all it is the best of them.
+  for _, s in ipairs(slots) do
+    if s.earned and s.itemLevel then
+      if not plan.current or s.itemLevel > plan.current.itemLevel then
+        plan.current = { itemLevel = s.itemLevel, level = s.level }
+      end
+    end
+  end
+
+  local runs = c.weeklyRuns
+  local fresh = (runs and runs.levels and not NS.Store.IsStale(runs.capturedAt))
+    and true or false
+  plan.haveRuns = fresh
+
+  local cap, capItem = Data.VaultCapLevel()
+  if cap and capItem then
+    plan.cap = { level = cap, itemLevel = capItem }
+    if fresh then plan.cap.runsNeeded = runsNeededFor(runs.levels, cap) end
+  end
+
+  if fresh then
+    local eighth = runs.levels[VAULT_TOP_RUNS]
+
+    if eighth then
+      -- Eight runs already. The vault is worth what the lowest of them is worth,
+      -- so the next step is the smallest level that beats it. Levels paying the
+      -- same reward are skipped -- "improve to 318" offered twice, once for +9
+      -- and once for +10, is noise rather than a choice.
+      local floorItem = Data.VaultRewardLevel(eighth)
+      for level = eighth + 1, cap or MAX_PROBE do
+        local item = Data.VaultRewardLevel(level)
+        if item and (not floorItem or item > floorItem) then
+          plan.next = {
+            level = level, itemLevel = item,
+            runsNeeded = runsNeededFor(runs.levels, level),
+          }
+          break
+        end
+      end
+    else
+      -- Fewer than eight. What is short is the count, not the level, so the
+      -- useful answer is what carrying on at the level you are already running
+      -- would be worth. Measuring against the absolute floor instead produced
+      -- "improve to 298, 3 more runs at +2" for somebody with five +10s: true,
+      -- and no use to anyone.
+      local lowest
+      for _, l in ipairs(runs.levels) do
+        if not lowest or l < lowest then lowest = l end
+      end
+      local item = lowest and Data.VaultRewardLevel(lowest) or nil
+      if item then
+        plan.next = {
+          level = lowest, itemLevel = item,
+          runsNeeded = runsNeededFor(runs.levels, lowest),
+        }
+      end
+    end
+
+    -- Nothing worth saying when the next step is already the ceiling.
+    if plan.next and plan.cap and plan.next.itemLevel >= plan.cap.itemLevel then
+      plan.next = nil
+    end
+  end
+
+  return plan
+end
+
 function Data.CaptureCurrencies(c, now)
   local Cur = NS.Currencies
   if not Cur then return end
@@ -337,6 +555,7 @@ function Data.CaptureAll(reason)
     Data.CaptureBest(c, now)
     Data.CaptureKeystone(c, now)
     Data.CaptureVault(c, now)
+    Data.CaptureWeeklyRuns(c, now)
     Data.CaptureCurrencies(c, now)
     Data.CaptureObtained(c)
     Data.CaptureVoidcaches(c)
