@@ -505,11 +505,38 @@ end
 --------------------------------------------------------------------------------
 local pending = false
 
+-- A full sweep is not cheap: eight GetSeasonBestForMap calls, thirteen currency
+-- columns, the vault, the run history, the voidcaches and a bag scan. Once at
+-- login that is nothing. Once after every pull it is a hitch you can feel, and
+-- that is what was happening -- looting during combat sets `pending`, and
+-- leaving combat spends it, so a key with thirty pulls paid for thirty sweeps.
+--
+-- Nothing it reads changes fast enough to be worth that. Fifteen seconds is far
+-- below the rate any of it moves, and the moments that genuinely matter say so
+-- by name and skip the throttle.
+local MIN_CAPTURE_GAP = 15
+local lastCaptureAt = 0
+
+-- Named in rather than out. An allow-list would have quietly swallowed
+-- enter-world-2 -- the six-second retry that exists because the API is not ready
+-- at two -- and a capture that silently does not happen is worse than one that
+-- happens too often. Only the repeating one is held back; anything added later
+-- runs until somebody decides otherwise.
+local THROTTLED = { ["post-combat"] = true }
+
 function Data.CaptureAll(reason)
   if InCombatLockdown() then
     pending = true
     return
   end
+
+  local now = GetTime and GetTime() or 0
+  if THROTTLED[reason or ""] and (now - lastCaptureAt) < MIN_CAPTURE_GAP then
+    NS.Debug("CaptureAll(%s) skipped -- %.0fs since the last one",
+      tostring(reason), now - lastCaptureAt)
+    return
+  end
+  lastCaptureAt = now
   local key, name, realm = playerKey()
   local c = NS.Store.GetOrCreateChar(key)
   c.name, c.realm = name, realm
@@ -647,10 +674,14 @@ NS.On("PLAYER_SPECIALIZATION_CHANGED", function(_, unit)
 end)
 
 NS.On("PLAYER_REGEN_ENABLED", function()
-  if pending then
-    pending = false
-    Data.CaptureAll("post-combat")
-  end
+  if not pending then return end
+  pending = false
+  -- Two seconds after the fight rather than the instant it ends. Combat leaving
+  -- is already a busy frame -- auras falling off, nameplates going, other addons
+  -- doing their own tidying -- and this has no reason to be in it.
+  C_Timer.After(2, function()
+    if not InCombatLockdown() then Data.CaptureAll("post-combat") end
+  end)
 end)
 
 NS.On("PLAYER_LOGOUT", function()
