@@ -50,6 +50,13 @@ local DEFS = {
     match = function(n) return n:find("marl", 1, true) end,
     item  = "marl",
   },
+  -- Field Accolade (id 3405). Earned across the world rather than in one place,
+  -- and spent in bulk: 750 buys a veteran piece, which is why the column exists
+  -- at all -- the number only means something next to that threshold.
+  ACCOLADES = {
+    label = "Field Accolade",
+    match = function(n) return n:find("accolade", 1, true) end,
+  },
   MANAFLUX = {
     label = "Venomblight Manaflux",
     match = function(n) return n:find("manaflux", 1, true) or n:find("venomblight", 1, true) end,
@@ -88,6 +95,13 @@ C.COLUMNS = {
     roster = true },
   { key = "MARL",      id = "marl",      label = "Marl",  w = 52, color = { 0.72, 0.58, 0.95 },
     roster = true },
+  -- roster: the whole point is the account-wide total. 750 is a lot to gather on
+  -- one character and the exchange does not care which one earned it, so the
+  -- question is always "how close is the warband", not "how close is this alt".
+  { key = "ACCOLADES", id = "accolades", label = "Accol", w = 56, color = { 0.95, 0.75, 0.40 },
+    roster = true,
+    -- What the number is for. Rendered by the tooltip beside the total.
+    exchange = { cost = 750, what = "a veteran gear piece" } },
   { key = "MANAFLUX",  id = "manaflux",  label = "Flux",  w = 52, color = { 0.45, 0.95, 0.65 } },
   -- Not "capped" style: that headlines progress towards the season cap, which is
   -- right for a crest you only ever accumulate and wrong for a spark you spend.

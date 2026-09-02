@@ -277,7 +277,30 @@ end
 --------------------------------------------------------------------------------
 local ROSTER_ROWS = 12
 
-local function addAccountRoster(rows, r, g, b, heading, note)
+-- What a total is actually worth, for a currency you spend in one lump.
+--
+-- A bare "Total 1480" answers nothing on its own: the question is how many
+-- veteran pieces that is and how far off the next one. Only columns that
+-- declare an `exchange` get this -- everywhere else the total is the answer.
+local function addExchangeLine(field, total)
+  local col = NS.Currencies.ColumnByID(field)
+  local ex = col and col.exchange
+  if not (ex and ex.cost and ex.cost > 0) then return end
+
+  local affordable = math.floor(total / ex.cost)
+  local short = ex.cost - (total % ex.cost)
+
+  if affordable > 0 then
+    GameTooltip:AddDoubleLine(
+      ("  Buys %d x"):format(affordable), ex.what, 0.55, 0.9, 0.6, 0.55, 0.9, 0.6)
+    GameTooltip:AddLine(("  %d more for the next one."):format(short), 0.5, 0.5, 0.5)
+  else
+    GameTooltip:AddDoubleLine("  Short by", tostring(short), 0.85, 0.7, 0.3, 0.85, 0.7, 0.3)
+    GameTooltip:AddLine(("  %d buys %s."):format(ex.cost, ex.what), 0.5, 0.5, 0.5)
+  end
+end
+
+local function addAccountRoster(rows, r, g, b, heading, note, field)
   GameTooltip:AddLine(" ")
   GameTooltip:AddLine(heading, 1, 0.82, 0)
   local total = 0
@@ -292,6 +315,7 @@ local function addAccountRoster(rows, r, g, b, heading, note)
     GameTooltip:AddLine(("  ...and %d more"):format(#rows - ROSTER_ROWS), 0.5, 0.5, 0.5)
   end
   GameTooltip:AddDoubleLine("  Total", tostring(total), 0.55, 0.75, 1, 0.55, 0.75, 1)
+  addExchangeLine(field, total)
   if note then GameTooltip:AddLine(note, 0.5, 0.5, 0.5, true) end
 end
 
@@ -334,12 +358,13 @@ local function addCurrencyRoster(field, rec, r, g, b)
   local id = (rec and rec.id) or (col and NS.Currencies.Resolve(col.key))
   local live = NS.Currencies.AccountBalances(id)
   if live then
-    addAccountRoster(live, r, g, b, "Every character (warband):")
+    addAccountRoster(live, r, g, b, "Every character (warband):", nil, field)
   else
     local cached = capturedRoster(field)
     if cached then
       addAccountRoster(cached, r, g, b, "Every character KeyGrid has seen:",
-        "Snapshots from characters you've logged into. The Blizzard API has no currency data to fill in the rest.")
+        "Snapshots from characters you've logged into. The Blizzard API has no currency data to fill in the rest.",
+        field)
     end
   end
 end
