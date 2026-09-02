@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.3.1 — 2026-09-01
+
+- **The Vault column tells you how many keys you still owe.** It used to show
+  runs done, runs needed, and the key level each slot would grant — four numbers
+  a row, three rows, and not the one you wanted. Hovering now leads with the
+  answer:
+
+      All three at top reward   3 more +10s
+      Rewards                   318 / 318 / 315
+      Runs this week            5
+
+  Eight runs at or above a level puts every slot at or above it, so that figure
+  holds regardless of Blizzard's per-slot arithmetic.
+
+- **Item levels, not just key levels.** A slot granting `+10` now also says what
+  that is worth. `GetRewardLevelForDifficultyLevel` returns two values of which
+  only one is reliably an item level — the other came back as `28` on a live
+  client — and where both are item levels the larger is the vault and the smaller
+  is the end-of-run drop. The ceiling is probed rather than written down, so it
+  survives a season turning over.
+
+- **A finished vault says so without being logged into.** A character whose three
+  slots already read 318 is done, and that is visible from the stored data. Being
+  told to log in on it was the opposite of what an account-wide grid is for.
+  Where the run list genuinely is missing, the target is still named.
+
+- **The per-slot run counter is no longer shown.** It does not behave like a run
+  count: across the roster one character reported 4, 4 and 15 runs on its three
+  slots at the same instant, and another reported ten runs against a threshold of
+  eight while awarding nothing. Nothing is now derived from a number that cannot
+  be explained.
+
+- **This week's runs are recorded**, which is what the shortfall is counted
+  from. Season bests are a different question: this one counts repeats and cares
+  only about levels.
+
+- **A full re-capture no longer lands after every pull.** Anything arriving
+  during combat queued a sweep — eight dungeon queries, thirteen currency
+  columns, the vault, bags — that ran the moment combat dropped. Held to one
+  every fifteen seconds now, and two seconds clear of the frame combat ends on.
+
 ## v1.3.0 — 2026-08-30
 
 - **Dungeon cells show your best _timed_ run.** They used to show whichever run
