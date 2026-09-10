@@ -504,7 +504,10 @@ function C.AccountBalances(id)
       local qty = tonumber(e.quantity or e.amount or e.currencyQuantity)
       if name and qty then
         if name == me then haveMe = true end
-        out[#out + 1] = { name = name, quantity = qty }
+        -- fullCharacterName is "Name-Realm", which is what the store is keyed
+        -- by; the bare name alone cannot tell two same-named alts apart.
+        out[#out + 1] = { name = name, quantity = qty,
+                          full = e.fullCharacterName, guid = e.characterGUID }
       end
     end
   end
@@ -682,7 +685,7 @@ local function printResolved()
     print(("  Warband API: |cff40ff40C_CurrencyInfo.%s|r — %s for %s"):format(
       api, coins and ((#coins) .. " characters") or "no data yet", C.Label("COINS")))
     for _, e in ipairs(coins or {}) do
-      print(("    %s  %d"):format(e.name, e.quantity))
+      print(("    %-14s %6d  %s"):format(e.name, e.quantity, e.full or "(no full name)"))
     end
   else
     print("  Warband API: |cffff5555none on this client|r — roster falls back to KeyGrid's captures")

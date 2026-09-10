@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Other characters' Coins, Marl and Accolades follow warband transfers.** A
+  cell used to be a snapshot from the last time you played that character, so
+  pooling coins onto one alt left every other row showing money it no longer
+  had. The live warband balance is now written into each known character's cell
+  as it arrives; the tooltip says "On hand as of … (warband data)" when that is
+  where the number came from. Characters KeyGrid has never seen still need one
+  login.
+
 ## v1.3.1 — 2026-09-01
 
 - **The Vault column tells you how many keys you still owe.** It used to show

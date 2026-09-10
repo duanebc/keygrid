@@ -486,7 +486,17 @@ function UI.ShowCurrencyTooltip(anchor, c, field, title, tint)
   if rec.id then
     GameTooltip:AddDoubleLine("Currency id", tostring(rec.id), 0.45, 0.45, 0.45, 0.5, 0.5, 0.5)
   end
-  GameTooltip:AddLine("As of " .. UI.Ago(rec.capturedAt), 0.5, 0.5, 0.5)
+  if rec.warbandAt and rec.warbandAt > (rec.capturedAt or 0) then
+    -- The on-hand count came from the warband data, more recently than this
+    -- character last reported the rest of the record.
+    GameTooltip:AddLine("On hand as of " .. UI.Ago(rec.warbandAt) .. " (warband data)",
+      0.5, 0.5, 0.5)
+    if rec.capturedAt then
+      GameTooltip:AddLine("Other details as of " .. UI.Ago(rec.capturedAt), 0.5, 0.5, 0.5)
+    end
+  else
+    GameTooltip:AddLine("As of " .. UI.Ago(rec.capturedAt), 0.5, 0.5, 0.5)
+  end
   addCurrencyRoster(field, rec, r, g, b)
   GameTooltip:Show()
 end

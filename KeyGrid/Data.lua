@@ -387,8 +387,10 @@ function Data.CaptureCurrencies(c, now)
   end)
 
   -- Warband balances are asynchronous: ask here so the answer is already cached
-  -- by the time a currency cell is hovered.
+  -- by the time a currency cell is hovered -- and apply whatever answer is
+  -- already in hand, so the other rows follow a transfer made from this one.
   Cur.RequestAccountData()
+  pcall(Data.MergeWarbandBalances, now)
 
   for _, col in ipairs(Cur.COLUMNS) do
     -- A currency if the game lists it as one, else (where the def names a bag
@@ -634,9 +636,76 @@ NS.On("CURRENCY_DISPLAY_UPDATE", function()
   refreshUI()
 end)
 
+--------------------------------------------------------------------------------
+-- Other characters' balances, from the warband-transfer data
+--
+-- A cell is a snapshot taken while logged in on that character, so moving coins
+-- between two characters updates one row and leaves the other wrong until it is
+-- next played. The transfer UI's data knows every account character's balance
+-- for a transferable currency; writing it into the rows KeyGrid already has
+-- keeps them honest without a login. Rows are never created from it: a name and
+-- a number is not a character.
+--------------------------------------------------------------------------------
+
+-- The store key for the API's "Name-Realm", spelled the way playerKey spells it.
+local function storeKeyFromFull(full)
+  local name, realm = full:match("^([^%-]+)%-(.+)$")
+  if not name then return nil end
+  return name .. "-" .. realm:gsub("%s+", "")
+end
+
+-- Without a realm, a name matches only when exactly one row carries it.
+local function rowByBareName(chars, name)
+  local found
+  for key, c in pairs(chars) do
+    if c.name == name or key:match("^(.-)%-") == name then
+      if found then return nil end
+      found = c
+    end
+  end
+  return found
+end
+
+function Data.MergeWarbandBalances(now)
+  local Cur = NS.Currencies
+  if not Cur then return end
+  local chars = NS.Store.DB().chars or {}
+  local me = playerKey()
+  local changed = false
+  for _, col in ipairs(Cur.COLUMNS) do
+    local id = Cur.Resolve(col.key)
+    -- nil when the client has no API, has not answered yet, or the currency is
+    -- not transferable -- in every case there is nothing to say.
+    local list = id and Cur.AccountBalances(id)
+    for _, e in ipairs(list or {}) do
+      local key = e.full and storeKeyFromFull(e.full)
+      local c = key and chars[key] or (not key and rowByBareName(chars, e.name)) or nil
+      if c and not e.isPlayer and key ~= me and c ~= chars[me] then
+        local rec = c[col.id]
+        if not rec then
+          rec = { id = id, name = col.label, have = 0, source = "currency",
+                  transferable = true }
+          c[col.id] = rec
+        end
+        if rec.have ~= e.quantity then
+          -- Only what is on hand: a transfer is not a spend, and everything
+          -- else in the record is still what that character last reported.
+          rec.have = e.quantity
+          changed = true
+        end
+        rec.warbandAt = now
+      end
+    end
+  end
+  return changed
+end
+
 -- Warband currency data landing. The event name is client-dependent, and NS.On
 -- quietly swallows one this client doesn't know.
-NS.On("ACCOUNT_CHARACTER_CURRENCY_DATA_RECEIVED", refreshUI)
+NS.On("ACCOUNT_CHARACTER_CURRENCY_DATA_RECEIVED", function()
+  pcall(Data.MergeWarbandBalances, GetServerTime())
+  refreshUI()
+end)
 
 -- Grow the obtained set as loot is received (boss loot + bonus rolls fire
 -- ENCOUNTER_LOOT_RECEIVED; personal pickups fire CHAT_MSG_LOOT).
