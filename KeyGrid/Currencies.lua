@@ -487,9 +487,18 @@ function C.RequestAccountData()
   pcall(fn)
 end
 
+-- Set when ACCOUNT_CHARACTER_CURRENCY_DATA_RECEIVED fires, so an empty fetch can
+-- be told apart from one that has not been answered.
+local accountAnswered = false
+function C.AccountDataReceived() accountAnswered = true end
+
 -- -> array of { name, quantity }, richest first. nil when the client has no such
 -- API, or hasn't answered yet. Field names are read loosely for the same reason
 -- the functions are probed.
+--
+-- The list holds only characters with a NON-ZERO balance -- Blizzard's own
+-- tooltip is built from it and shows the same names -- so a character missing
+-- from it has none, not an unknown amount.
 function C.AccountBalances(id)
   local fn = accountFn(ACCOUNT_FETCH)
   if not (id and fn) then return nil end
@@ -513,8 +522,8 @@ function C.AccountBalances(id)
   end
   -- Empty means the answer hasn't arrived yet (the fetch is asynchronous), which
   -- is not the same as "nobody has any" — say nothing rather than report a total
-  -- that is missing every alt.
-  if #out == 0 then return nil end
+  -- that is missing every alt. Once the data event has fired, empty is an answer.
+  if #out == 0 and not accountAnswered then return nil end
   -- The list is the OTHER characters on the account: this one is read straight
   -- from the currency, or the total is short by everything you're carrying.
   if me and not haveMe then

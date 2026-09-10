@@ -677,23 +677,33 @@ function Data.MergeWarbandBalances(now)
     -- nil when the client has no API, has not answered yet, or the currency is
     -- not transferable -- in every case there is nothing to say.
     local list = id and Cur.AccountBalances(id)
-    for _, e in ipairs(list or {}) do
-      local key = e.full and storeKeyFromFull(e.full)
-      local c = key and chars[key] or (not key and rowByBareName(chars, e.name)) or nil
-      if c and not e.isPlayer and key ~= me and c ~= chars[me] then
-        local rec = c[col.id]
-        if not rec then
-          rec = { id = id, name = col.label, have = 0, source = "currency",
-                  transferable = true }
-          c[col.id] = rec
+    if list then
+      -- The list names only characters holding some. Every other known row
+      -- has none -- which is exactly the row that goes stale after a transfer
+      -- out, so the absence is the more important half of the answer.
+      local listed = {}
+      for _, e in ipairs(list) do
+        local key = e.full and storeKeyFromFull(e.full)
+        local c = key and chars[key] or (not key and rowByBareName(chars, e.name)) or nil
+        if c then listed[c] = e.quantity end
+      end
+      for key, c in pairs(chars) do
+        if key ~= me then
+          local qty = listed[c] or 0
+          local rec = c[col.id]
+          if not rec then
+            rec = { id = id, name = col.label, have = 0, source = "currency",
+                    transferable = true }
+            c[col.id] = rec
+          end
+          if rec.have ~= qty then
+            -- Only what is on hand: a transfer is not a spend, and everything
+            -- else in the record is still what that character last reported.
+            rec.have = qty
+            changed = true
+          end
+          rec.warbandAt = now
         end
-        if rec.have ~= e.quantity then
-          -- Only what is on hand: a transfer is not a spend, and everything
-          -- else in the record is still what that character last reported.
-          rec.have = e.quantity
-          changed = true
-        end
-        rec.warbandAt = now
       end
     end
   end
@@ -703,6 +713,7 @@ end
 -- Warband currency data landing. The event name is client-dependent, and NS.On
 -- quietly swallows one this client doesn't know.
 NS.On("ACCOUNT_CHARACTER_CURRENCY_DATA_RECEIVED", function()
+  if NS.Currencies then NS.Currencies.AccountDataReceived() end
   pcall(Data.MergeWarbandBalances, GetServerTime())
   refreshUI()
 end)
