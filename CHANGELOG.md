@@ -9,6 +9,10 @@
   as it arrives; the tooltip says "On hand as of … (warband data)" when that is
   where the number came from. Characters KeyGrid has never seen still need one
   login.
+- **The Spark season count is what the game calls "Total".** It took the
+  larger of on-hand and earned dust, and on one character earned read a step
+  higher than on hand, so the grid said 7/7 where the game said 6/7. On hand
+  is the figure now; the tooltip shows the dust's raw on-hand / earned / cap.
 
 ## v1.3.1 — 2026-09-01
 

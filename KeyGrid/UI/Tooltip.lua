@@ -442,6 +442,18 @@ function UI.ShowCurrencyTooltip(anchor, c, field, title, tint)
     if got then
       GameTooltip:AddLine("Season count from Tidal Spark Dust, which the game", 0.6, 0.6, 0.6)
       GameTooltip:AddLine("hands you one of with every Spark of Tides.", 0.6, 0.6, 0.6)
+      -- The dust's own numbers, so a count that disagrees with the game's
+      -- tooltip can be traced to the field rather than argued about.
+      local dust = c.sparkdust
+      if dust then
+        GameTooltip:AddDoubleLine("Dust on hand / earned / cap",
+          ("%s / %s / %s"):format(tostring(dust.have or "-"),
+            tostring(dust.collected or "-"), tostring(dust.cap or "-")),
+          0.45, 0.45, 0.45, 0.5, 0.5, 0.5)
+        if dust.capturedAt then
+          GameTooltip:AddLine("Dust as of " .. UI.Ago(dust.capturedAt), 0.45, 0.45, 0.45)
+        end
+      end
     end
   else
     -- totalEarned isn't maintained for every currency; when it reads lower than

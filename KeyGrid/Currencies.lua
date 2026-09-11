@@ -436,9 +436,13 @@ function C.SparkProgress(c)
   local dust = c and c.sparkdust
   if not dust then return nil end
   rememberSparkCap(dust.cap)
-  -- Dust is never spent, so earned and on-hand agree; take the larger anyway,
-  -- for a client that stops maintaining totalEarned.
-  local got = math.max(dust.collected or 0, dust.have or 0)
+  -- On hand is the figure. It is what the game's own tooltip calls "Total"
+  -- and measures against the season maximum, and it is the one the client
+  -- always maintains. totalEarned was taken when it read higher, on the theory
+  -- that dust is never spent so the two must agree -- and a paladin was shown
+  -- 7/7 against the game's 6/7, so they do not always. It is the fallback
+  -- now, for a snapshot old enough to have no on-hand count at all.
+  local got = dust.have or dust.collected or 0
   return got, sparkSeasonMax(dust.cap)
 end
 
