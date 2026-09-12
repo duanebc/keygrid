@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.3.2 — 2026-09-12
 
 - **Other characters' Coins, Marl and Accolades follow warband transfers.** A
   cell used to be a snapshot from the last time you played that character, so
